@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { MapPin, Phone, Instagram, Clock, MessageCircle } from "lucide-react";
 import { getLoja, linkWhatsApp } from "@/lib/supabase";
 
+export const revalidate = 300;
+
 export const metadata: Metadata = {
   title: "Contato e localização",
   description: "Endereço, horário de atendimento e rota até a loja.",
