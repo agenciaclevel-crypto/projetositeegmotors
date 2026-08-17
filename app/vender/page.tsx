@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { getLoja } from "@/lib/supabase";
 import FormReposicao from "@/components/FormReposicao";
 
+export const revalidate = 300;
+
 export const metadata: Metadata = {
   title: "Venda ou troque seu carro",
   description: "Avaliação sem compromisso, proposta no mesmo dia e transferência feita na loja.",
