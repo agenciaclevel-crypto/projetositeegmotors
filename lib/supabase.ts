@@ -70,6 +70,8 @@ export type Banner = {
   imagem_url: string;
   imagem_mobile_url: string | null;
   link: string | null;
+  ativo?: boolean;
+  ordem?: number;
 };
 
 const CAMPOS_VEICULO = `
