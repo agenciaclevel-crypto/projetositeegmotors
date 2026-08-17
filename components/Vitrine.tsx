@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Search, Car } from "lucide-react";
 import VeiculoCard from "./VeiculoCard";
-import { type Veiculo, brl } from "@/lib/supabase";
+import { type Veiculo } from "@/lib/supabase";
 
 const campo = "w-full rounded-[3px] border border-linha bg-bg1 px-3 py-2.5 text-sm text-ink";
 const rotulo = "mb-1.5 block font-mono text-[9px] uppercase tracking-[0.14em] text-inkFaint";
@@ -13,7 +13,6 @@ export default function Vitrine({ veiculos }: { veiculos: Veiculo[] }) {
   const [marca, setMarca] = useState("todas");
   const [condicao, setCondicao] = useState("todos");
   const [cambio, setCambio] = useState("Todos");
-  const [teto, setTeto] = useState(300000);
   const [ordem, setOrdem] = useState("destaque");
 
   const marcas = useMemo(
@@ -24,16 +23,15 @@ export default function Vitrine({ veiculos }: { veiculos: Veiculo[] }) {
       `${v.marca} ${v.modelo} ${v.versao ?? ""}`.toLowerCase().includes(busca.toLowerCase()) &&
       (marca === "todas" || v.marca === marca) &&
       (condicao === "todos" || v.condicao === condicao) &&
-      (cambio === "Todos" || v.cambio === cambio) &&
-      v.preco <= teto);
+      (cambio === "Todos" || v.cambio === cambio));
     if (ordem === "menor") r = [...r].sort((a, b) => a.preco - b.preco);
     if (ordem === "maior") r = [...r].sort((a, b) => b.preco - a.preco);
     if (ordem === "km") r = [...r].sort((a, b) => a.km - b.km);
     return r;
-  }, [veiculos, busca, marca, condicao, cambio, teto, ordem]);
+  }, [veiculos, busca, marca, condicao, cambio, ordem]);
 
   const limpar = () => {
-    setBusca(""); setMarca("todas"); setCondicao("todos"); setCambio("Todos"); setTeto(300000);
+    setBusca(""); setMarca("todas"); setCondicao("todos"); setCambio("Todos");
   };
 
   return (
@@ -55,7 +53,7 @@ export default function Vitrine({ veiculos }: { veiculos: Veiculo[] }) {
         ))}
       </div>
 
-      <div className="mt-8 grid gap-3 border-t border-linha pt-7 md:grid-cols-4">
+      <div className="mt-8 grid gap-3 border-t border-linha pt-7 md:grid-cols-3">
         <label><span className={rotulo}>Condição</span>
           <select value={condicao} onChange={(e) => setCondicao(e.target.value)} className={campo}>
             <option value="todos">Novos e seminovos</option>
@@ -67,10 +65,6 @@ export default function Vitrine({ veiculos }: { veiculos: Veiculo[] }) {
           <select value={cambio} onChange={(e) => setCambio(e.target.value)} className={campo}>
             {["Todos", "Automático", "CVT", "Manual"].map((c) => <option key={c}>{c}</option>)}
           </select>
-        </label>
-        <label><span className={rotulo}>Até {brl(teto)}</span>
-          <input type="range" min={40000} max={300000} step={5000} value={teto}
-            onChange={(e) => setTeto(Number(e.target.value))} className="mt-3 w-full accent-ouro" />
         </label>
         <label><span className={rotulo}>Ordenar</span>
           <select value={ordem} onChange={(e) => setOrdem(e.target.value)} className={campo}>
