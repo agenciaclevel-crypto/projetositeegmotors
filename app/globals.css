@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; }
+
+body { background: #0E0F12; color: #F3F0E9; -webkit-font-smoothing: antialiased; }
+
+.cartao { transition: all .18s ease; }
+.cartao:hover { border-color: #C7A25C; box-shadow: 0 14px 34px rgba(0,0,0,.45); transform: translateY(-3px); }
+.cartao .foto img { transition: transform .55s cubic-bezier(.2,.7,.3,1); }
+.cartao:hover .foto img { transform: scale(1.05); }
+
+.sobe { animation: sobe .5s cubic-bezier(.2,.7,.3,1) both; }
+@keyframes sobe { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+input:focus, select:focus, textarea:focus { border-color: #C7A25C !important; outline: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  .cartao:hover { transform: none; }
+}
