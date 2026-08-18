@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Search, Car } from "lucide-react";
 import VeiculoCard from "./VeiculoCard";
 import { type Veiculo } from "@/lib/supabase";
+import { logoDaMarca } from "@/lib/marcas";
 
 const campo = "w-full rounded-[3px] border border-linha bg-bg1 px-3 py-2.5 text-sm text-ink";
 const rotulo = "mb-1.5 block font-mono text-[9px] uppercase tracking-[0.14em] text-inkFaint";
@@ -17,6 +18,12 @@ export default function Vitrine({ veiculos }: { veiculos: Veiculo[] }) {
 
   const marcas = useMemo(
     () => Array.from(new Set(veiculos.map((v) => v.marca))).sort(), [veiculos]);
+
+  const contagemPorMarca = useMemo(() => {
+    const m = new Map<string, number>();
+    veiculos.forEach((v) => m.set(v.marca, (m.get(v.marca) ?? 0) + 1));
+    return m;
+  }, [veiculos]);
 
   const lista = useMemo(() => {
     let r = veiculos.filter((v) =>
@@ -36,22 +43,49 @@ export default function Vitrine({ veiculos }: { veiculos: Veiculo[] }) {
 
   return (
     <>
-      <div className="relative mt-8 max-w-[620px]">
-        <Search size={18} className="absolute left-4 top-4 text-inkFaint" />
-        <input value={busca} onChange={(e) => setBusca(e.target.value)}
-          placeholder="Buscar por marca, modelo ou versão"
-          className="w-full rounded-[3px] border border-linha bg-bg1 py-3.5 pl-11 pr-4 text-[15px] text-ink" />
+      <h2 className="mt-8 font-display text-xl uppercase tracking-[0.02em] sm:text-2xl">
+        Qual veículo você está buscando?
+      </h2>
+
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+        <div className="relative flex-1">
+          <Search size={18} className="absolute left-4 top-4 text-inkFaint" />
+          <input value={busca} onChange={(e) => setBusca(e.target.value)}
+            placeholder="Marca, modelo ou versão"
+            className="w-full rounded-[3px] border border-linha bg-bg1 py-3.5 pl-11 pr-4 text-[15px] text-ink" />
+        </div>
+        <button onClick={limpar}
+          className="shrink-0 rounded-[3px] border border-linha px-5 py-3.5 text-sm font-semibold text-inkDim transition-colors hover:border-ouro hover:text-ouro">
+          Ver todo estoque
+        </button>
       </div>
 
-      <div className="mt-7 flex flex-wrap gap-2">
-        {["todas", ...marcas].map((m) => (
-          <button key={m} onClick={() => setMarca(m)}
-            className={`rounded-[3px] border px-3.5 py-2 text-[13px] font-medium transition-colors ${
-              marca === m ? "border-ouro bg-ouro/15 text-ouro" : "border-linha bg-bg1 text-inkDim"}`}>
-            {m === "todas" ? "Todas as marcas" : m}
-          </button>
-        ))}
-      </div>
+      {marcas.length > 0 && (
+        <div className="mt-6 grid grid-cols-3 gap-2.5 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+          {marcas.map((m) => {
+            const logo = logoDaMarca(m);
+            const ativa = marca === m;
+            return (
+              <button key={m} onClick={() => setMarca(ativa ? "todas" : m)}
+                aria-pressed={ativa}
+                className={`flex flex-col items-center gap-2 rounded-[3px] border px-2 py-4 transition-colors ${
+                  ativa ? "border-ouro bg-ouro/10" : "border-linha bg-bg1 hover:border-ouro/50"}`}>
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#F3F0E9]">
+                  {logo ? (
+                    <svg viewBox="0 0 24 24" className="h-6 w-6" fill={`#${logo.hex}`} aria-hidden>
+                      <path d={logo.path} />
+                    </svg>
+                  ) : (
+                    <span className="font-display text-sm text-bg0">{m.slice(0, 2).toUpperCase()}</span>
+                  )}
+                </span>
+                <span className="line-clamp-1 text-center text-[11px] font-medium leading-tight text-inkDim">{m}</span>
+                <span className="font-mono text-[9px] text-inkFaint">{contagemPorMarca.get(m)}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <div className="mt-8 grid gap-3 border-t border-linha pt-7 md:grid-cols-3">
         <label><span className={rotulo}>Condição</span>
