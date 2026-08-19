@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { MapPin, Phone, Instagram, Clock } from "lucide-react";
 import type { Loja } from "@/lib/supabase";
+import { formatarTelefone } from "@/lib/supabase";
 
 export default function Footer({ loja }: { loja: Loja }) {
   return (
@@ -17,7 +18,7 @@ export default function Footer({ loja }: { loja: Loja }) {
 
         <div className="space-y-3 text-sm text-inkDim">
           <p className="flex items-start gap-2"><MapPin size={16} className="mt-0.5 shrink-0" /> {loja.endereco}</p>
-          <p className="flex items-center gap-2"><Phone size={16} /> {loja.whatsapp}</p>
+          <p className="flex items-center gap-2"><Phone size={16} /> {formatarTelefone(loja.whatsapp)}</p>
           <p className="flex items-center gap-2"><Instagram size={16} /> {loja.instagram}</p>
         </div>
 

@@ -6,7 +6,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Menu, X, MessageCircle, Phone } from "lucide-react";
 import type { Loja } from "@/lib/supabase";
-import { linkWhatsApp } from "@/lib/supabase";
+import { linkWhatsApp, digitosNacionais, formatarTelefone } from "@/lib/supabase";
 
 const NAV = [
   { href: "/", label: "Estoque" },
@@ -42,9 +42,9 @@ export default function Header({ loja }: { loja: Loja }) {
 
         <div className="flex items-center gap-3">
           {loja.whatsapp && (
-            <a href={`tel:+55${loja.whatsapp.replace(/\D/g, "")}`}
+            <a href={`tel:+55${digitosNacionais(loja.whatsapp)}`}
               className="hidden items-center gap-1.5 text-sm font-medium text-inkDim transition-colors hover:text-ink sm:flex">
-              <Phone size={15} /> {loja.whatsapp}
+              <Phone size={15} /> {formatarTelefone(loja.whatsapp)}
             </a>
           )}
           <a href={linkWhatsApp(loja, `Olá! Vim pelo site da ${loja.nome}.`)}
