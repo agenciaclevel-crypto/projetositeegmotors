@@ -8,7 +8,7 @@ export default function Footer({ loja }: { loja: Loja }) {
       <div className="mx-auto grid max-w-[1180px] gap-10 px-5 py-14 md:grid-cols-3">
         <div>
           {loja.logo_claro_url ? (
-            <Image src={loja.logo_claro_url} alt={loja.nome} width={150} height={38} className="h-[38px] w-auto" />
+            <Image src={loja.logo_claro_url} alt={loja.nome} width={220} height={56} className="h-14 w-auto" />
           ) : (
             <span className="font-display text-2xl uppercase tracking-[0.06em]">{loja.nome}</span>
           )}

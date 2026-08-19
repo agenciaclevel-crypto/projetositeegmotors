@@ -4,13 +4,14 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { Menu, X, MessageCircle } from "lucide-react";
+import { Menu, X, MessageCircle, Phone } from "lucide-react";
 import type { Loja } from "@/lib/supabase";
 import { linkWhatsApp } from "@/lib/supabase";
 
 const NAV = [
   { href: "/", label: "Estoque" },
   { href: "/vender", label: "Venda seu carro" },
+  { href: "/agenciamento", label: "Agenciamento" },
   { href: "/contato", label: "Contato" },
 ];
 
@@ -23,8 +24,8 @@ export default function Header({ loja }: { loja: Loja }) {
       <div className="mx-auto flex max-w-[1180px] items-center justify-between px-5 py-4">
         <Link href="/" onClick={() => setAberto(false)} className="flex items-center">
           {loja.logo_claro_url ? (
-            <Image src={loja.logo_claro_url} alt={loja.nome} width={120} height={30}
-              className="h-[30px] w-auto" priority />
+            <Image src={loja.logo_claro_url} alt={loja.nome} width={160} height={40}
+              className="h-10 w-auto" priority />
           ) : (
             <span className="font-display text-lg uppercase tracking-[0.06em]">{loja.nome}</span>
           )}
@@ -39,7 +40,13 @@ export default function Header({ loja }: { loja: Loja }) {
           ))}
         </nav>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          {loja.whatsapp && (
+            <a href={`tel:+55${loja.whatsapp.replace(/\D/g, "")}`}
+              className="hidden items-center gap-1.5 text-sm font-medium text-inkDim transition-colors hover:text-ink sm:flex">
+              <Phone size={15} /> {loja.whatsapp}
+            </a>
+          )}
           <a href={linkWhatsApp(loja, `Olá! Vim pelo site da ${loja.nome}.`)}
             target="_blank" rel="noreferrer"
             className="inline-flex items-center gap-2 rounded-[3px] bg-zap px-5 py-3 text-sm font-semibold text-white">
