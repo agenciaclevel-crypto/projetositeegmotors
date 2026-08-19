@@ -200,3 +200,22 @@ export const capaDe = (v: Veiculo) => {
 
 export const linkWhatsApp = (loja: Loja, texto: string) =>
   `https://wa.me/${(loja.whatsapp ?? "").replace(/\D/g, "")}?text=${encodeURIComponent(texto)}`;
+
+// Tira tudo que não é dígito e remove o 55 do país, se vier junto — devolve
+// só o DDD + número (10 ou 11 dígitos), pronto pra montar link tel:/wa.me.
+export const digitosNacionais = (raw: string | null | undefined) => {
+  let d = (raw ?? "").replace(/\D/g, "");
+  if (d.length > 11 && d.startsWith("55")) d = d.slice(2);
+  return d;
+};
+
+// Formata qualquer telefone BR (com ou sem 55, com ou sem pontuação) pro
+// padrão de exibição "(84) 99149-7373". Se não reconhecer o formato,
+// devolve o texto original em vez de quebrar a tela.
+export const formatarTelefone = (raw: string | null | undefined) => {
+  if (!raw) return "";
+  const d = digitosNacionais(raw);
+  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return raw;
+};
