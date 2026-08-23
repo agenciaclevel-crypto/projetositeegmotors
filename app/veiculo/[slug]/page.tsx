@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
@@ -7,6 +6,7 @@ import {
 } from "@/lib/supabase";
 import FormLead from "@/components/FormLead";
 import Simulador from "@/components/Simulador";
+import GaleriaVeiculo from "@/components/GaleriaVeiculo";
 
 // Revalida a cada 5 min; o webhook do painel força revalidação na hora
 // que o carro é vendido. Página estática = carrega rápido e indexa.
@@ -104,36 +104,7 @@ export default async function PaginaVeiculo({
       <div className="mt-6 grid gap-10 lg:grid-cols-5">
         {/* Galeria */}
         <div className="lg:col-span-3">
-          {fotos[0] && (
-            <div className="relative aspect-[3/2] overflow-hidden rounded border border-[#2C303A] bg-[#16181D]">
-              <Image
-                src={fotos[0].url}
-                alt={`${nome} — foto principal`}
-                fill
-                priority
-                sizes="(max-width: 1024px) 100vw, 60vw"
-                className="object-cover"
-              />
-            </div>
-          )}
-
-          <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-5">
-            {fotos.slice(1).map((f, i) => (
-              <div
-                key={f.url}
-                className="relative aspect-[3/2] overflow-hidden rounded border border-[#2C303A] bg-[#16181D]"
-              >
-                <Image
-                  src={f.url_thumb ?? f.url}
-                  alt={`${nome} — foto ${i + 2}`}
-                  fill
-                  loading="lazy"
-                  sizes="20vw"
-                  className="object-cover"
-                />
-              </div>
-            ))}
-          </div>
+          <GaleriaVeiculo fotos={fotos} nome={nome} />
 
           {/* Ficha técnica */}
           <h2 className="mt-10 font-mono text-[11px] tracking-[0.14em] text-[#6E7280]">
