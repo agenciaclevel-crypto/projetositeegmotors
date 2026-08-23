@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -17,17 +17,53 @@ const NAV = [
 
 export default function Header({ loja }: { loja: Loja }) {
   const [aberto, setAberto] = useState(false);
+  const [rolando, setRolando] = useState(false);
   const caminho = usePathname();
+
+  // Enquanto a página rola, a logo encolhe (some o "Motors", fica só o "EG");
+  // ao parar de rolar, volta ao tamanho completo.
+  useEffect(() => {
+    let temporizador: ReturnType<typeof setTimeout>;
+    function aoRolar() {
+      if (window.scrollY > 60) {
+        setRolando(true);
+        clearTimeout(temporizador);
+        temporizador = setTimeout(() => setRolando(false), 220);
+      } else {
+        clearTimeout(temporizador);
+        setRolando(false);
+      }
+    }
+    window.addEventListener("scroll", aoRolar, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", aoRolar);
+      clearTimeout(temporizador);
+    };
+  }, []);
+
+  const [primeiroNome, ...restoNome] = loja.nome.split(" ");
+  const restanteNome = restoNome.join(" ");
 
   return (
     <header className="sticky top-0 z-30 border-b border-linha bg-bg0/95 backdrop-blur">
       <div className="mx-auto flex max-w-[1180px] items-center justify-between px-5 py-4">
         <Link href="/" onClick={() => setAberto(false)} className="flex items-center">
           {loja.logo_claro_url ? (
-            <Image src={loja.logo_claro_url} alt={loja.nome} width={160} height={40}
-              className="h-10 w-auto" priority />
+            <div className={`overflow-hidden transition-[max-width] duration-500 ease-out ${
+              rolando ? "max-w-[40px]" : "max-w-[160px]"}`}>
+              <Image src={loja.logo_claro_url} alt={loja.nome} width={160} height={40}
+                className="h-10 w-auto max-w-none" priority />
+            </div>
           ) : (
-            <span className="font-display text-lg uppercase tracking-[0.06em]">{loja.nome}</span>
+            <span className="flex items-baseline font-display text-lg uppercase tracking-[0.06em]">
+              <span>{primeiroNome}</span>
+              {restanteNome && (
+                <span className={`overflow-hidden whitespace-nowrap transition-all duration-500 ease-out ${
+                  rolando ? "ml-0 max-w-0 opacity-0" : "ml-2 max-w-[160px] opacity-100"}`}>
+                  {restanteNome}
+                </span>
+              )}
+            </span>
           )}
         </Link>
 
