@@ -1,16 +1,63 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Pencil, Trash2, Eye, EyeOff, Users, Package, LogOut, Image as ImageIcon, Store } from "lucide-react";
+import { Plus, Pencil, Trash2, Eye, EyeOff, Users, Package, LogOut, Image as ImageIcon, Store, Search, Car as CarIcon } from "lucide-react";
 import { supabase, brl, formatKm, type Veiculo, type Banner, type Loja } from "@/lib/supabase";
 import FormVeiculo from "@/components/FormVeiculo";
 import FormBanner from "@/components/FormBanner";
 
 type Lead = {
-  id: string; nome: string; telefone: string; origem: string;
-  tipo: string; status: string; mensagem: string | null; criado_em: string;
+  id: string; nome: string; telefone: string; email: string | null; origem: string;
+  tipo: string; status: string; mensagem: string | null; veiculo_id: string | null;
+  veiculo_troca: Record<string, unknown> | null; criado_em: string;
 };
+
+const ROTULOS_STATUS: Record<string, string> = {
+  novo: "Novo", em_atendimento: "Em atendimento", ganho: "Ganho", perdido: "Perdido",
+};
+
+const ROTULOS_ORIGEM: Record<string, string> = {
+  site: "Site", agenciamento: "Agenciamento", financiamento: "Financiamento",
+};
+
+function formatarData(iso: string) {
+  return new Date(iso).toLocaleString("pt-BR", {
+    day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+  });
+}
+
+/** Mostra os detalhes guardados em veiculo_troca — que muda de cara conforme
+ * a origem: carro pra dar na troca (vender/agenciamento) ou simulação de
+ * financiamento (Simulador). */
+function DetalhesExtras({ troca }: { troca: Record<string, unknown> | null }) {
+  if (!troca) return null;
+
+  if (troca.simulacao) {
+    return (
+      <p className="text-[13px] text-inkDim">
+        <span className="text-inkFaint">Simulação:</span> entrada {brl(Number(troca.entrada) || 0)} ·{" "}
+        {String(troca.prazo)}x de {brl(Number(troca.parcela_estimada) || 0)}
+      </p>
+    );
+  }
+
+  if (troca.marca || troca.modelo) {
+    return (
+      <p className="text-[13px] text-inkDim">
+        <span className="text-inkFaint">Carro na troca:</span> {String(troca.marca ?? "")} {String(troca.modelo ?? "")}
+        {troca.ano ? ` · ${troca.ano}` : ""}{troca.km ? ` · ${troca.km} km` : ""}
+        {troca.valor_pretendido ? ` · pretende ${troca.valor_pretendido}` : ""}
+      </p>
+    );
+  }
+
+  if (troca.tem_troca) {
+    return <p className="text-[13px] text-inkDim">Tem um carro para dar na troca.</p>;
+  }
+
+  return null;
+}
 
 export default function Painel() {
   const [aba, setAba] = useState<"estoque" | "leads" | "banners" | "loja">("estoque");
@@ -22,7 +69,21 @@ export default function Painel() {
   const [editando, setEditando] = useState<Partial<Veiculo> | null>(null);
   const [editandoBanner, setEditandoBanner] = useState<Partial<Banner> | null>(null);
   const [carregando, setCarregando] = useState(true);
+  const [buscaLead, setBuscaLead] = useState("");
+  const [filtroTipo, setFiltroTipo] = useState("todos");
+  const [filtroOrigem, setFiltroOrigem] = useState("todas");
+  const [filtroStatus, setFiltroStatus] = useState("todos");
   const router = useRouter();
+
+  const origensDosLeads = useMemo(
+    () => Array.from(new Set(leads.map((l) => l.origem))).sort(), [leads]);
+
+  const leadsFiltrados = useMemo(() => leads.filter((l) =>
+    `${l.nome} ${l.mensagem ?? ""}`.toLowerCase().includes(buscaLead.toLowerCase()) &&
+    (filtroTipo === "todos" || l.tipo === filtroTipo) &&
+    (filtroOrigem === "todas" || l.origem === filtroOrigem) &&
+    (filtroStatus === "todos" || l.status === filtroStatus)
+  ), [leads, buscaLead, filtroTipo, filtroOrigem, filtroStatus]);
 
   const carregar = useCallback(async () => {
     const { data: sessao } = await supabase.auth.getSession();
@@ -86,6 +147,12 @@ export default function Painel() {
     const { error } = await supabase.from("lojas").update({ logo_claro_url: url }).eq("id", lojaId);
     if (error) { alert(`Falha ao salvar a logo: ${error.message}`); return; }
     carregar();
+  }
+
+  async function atualizarStatusLead(id: string, status: string) {
+    setLeads((atual) => atual.map((l) => (l.id === id ? { ...l, status } : l)));
+    const { error } = await supabase.from("leads").update({ status }).eq("id", id);
+    if (error) alert(`Falha ao atualizar status: ${error.message}`);
   }
 
   async function sair() {
@@ -157,29 +224,94 @@ export default function Painel() {
       )}
 
       {aba === "leads" && (
-        <div className="overflow-hidden rounded border border-linha bg-card">
-          {leads.map((l, i) => (
-            <div key={l.id} className={`flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between ${i ? "border-t border-linha" : ""}`}>
-              <div>
-                <p className="text-[15px] font-semibold">{l.nome}</p>
-                <p className="mt-1 font-mono text-[11px] text-inkFaint">
-                  {l.telefone} · {l.mensagem ?? "—"}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {l.tipo === "reposicao" && (
-                  <span className="rounded-sm border border-ouro/35 bg-ouro/10 px-2 py-1 font-mono text-[9px] tracking-[0.12em] text-ouro">REPOSIÇÃO</span>
-                )}
-                <span className="rounded-sm border border-linha bg-bg2 px-2 py-1 font-mono text-[9px] tracking-[0.1em] text-inkDim">
-                  {l.origem.toUpperCase()}
-                </span>
-                <a href={`https://wa.me/55${l.telefone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer"
-                  className="rounded-[3px] bg-zap px-3 py-2 text-xs font-semibold text-white">Responder</a>
-              </div>
+        <>
+          <div className="mb-4 flex flex-col gap-2.5 sm:flex-row">
+            <div className="relative flex-1">
+              <Search size={16} className="absolute left-3.5 top-3 text-inkFaint" />
+              <input value={buscaLead} onChange={(e) => setBuscaLead(e.target.value)}
+                placeholder="Buscar por nome ou mensagem"
+                className="w-full rounded-[3px] border border-linha bg-bg1 py-2.5 pl-10 pr-3 text-sm text-ink" />
             </div>
-          ))}
-          {leads.length === 0 && <p className="p-8 text-center text-sm text-inkDim">Nenhum lead ainda.</p>}
-        </div>
+            <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)}
+              className="rounded-[3px] border border-linha bg-bg1 px-3 py-2.5 text-sm text-ink">
+              <option value="todos">Compra e reposição</option>
+              <option value="compra">Só compra</option>
+              <option value="reposicao">Só reposição</option>
+            </select>
+            <select value={filtroOrigem} onChange={(e) => setFiltroOrigem(e.target.value)}
+              className="rounded-[3px] border border-linha bg-bg1 px-3 py-2.5 text-sm text-ink">
+              <option value="todas">Todas as origens</option>
+              {origensDosLeads.map((o) => (
+                <option key={o} value={o}>{ROTULOS_ORIGEM[o] ?? o}</option>
+              ))}
+            </select>
+            <select value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)}
+              className="rounded-[3px] border border-linha bg-bg1 px-3 py-2.5 text-sm text-ink">
+              <option value="todos">Todos os status</option>
+              {Object.entries(ROTULOS_STATUS).map(([v, rot]) => <option key={v} value={v}>{rot}</option>)}
+            </select>
+          </div>
+
+          <p className="mb-3 font-mono text-[11px] tracking-[0.1em] text-inkFaint">
+            {leadsFiltrados.length} DE {leads.length} {leads.length === 1 ? "LEAD" : "LEADS"}
+          </p>
+
+          <div className="grid gap-3">
+            {leadsFiltrados.map((l) => {
+              const veiculoInteresse = l.veiculo_id ? veiculos.find((v) => v.id === l.veiculo_id) : null;
+              return (
+                <div key={l.id} className="rounded border border-linha bg-card p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-[15px] font-semibold">{l.nome}</p>
+                      <p className="mt-1 font-mono text-[11px] text-inkFaint">
+                        {formatarData(l.criado_em)} · {l.telefone}{l.email ? ` · ${l.email}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`rounded-sm border px-2 py-1 font-mono text-[9px] tracking-[0.12em] ${
+                        l.tipo === "reposicao" ? "border-ouro/35 bg-ouro/10 text-ouro" : "border-linha bg-bg2 text-inkDim"}`}>
+                        {l.tipo === "reposicao" ? "REPOSIÇÃO" : "COMPRA"}
+                      </span>
+                      <span className="rounded-sm border border-linha bg-bg2 px-2 py-1 font-mono text-[9px] tracking-[0.1em] text-inkDim">
+                        {(ROTULOS_ORIGEM[l.origem] ?? l.origem).toUpperCase()}
+                      </span>
+                      <select value={l.status} onChange={(e) => atualizarStatusLead(l.id, e.target.value)}
+                        className="rounded-sm border border-linha bg-bg2 px-2 py-1.5 font-mono text-[9px] tracking-[0.1em] text-inkDim">
+                        {Object.entries(ROTULOS_STATUS).map(([v, rot]) => (
+                          <option key={v} value={v}>{rot.toUpperCase()}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {(veiculoInteresse || l.veiculo_troca || l.mensagem) && (
+                    <div className="mt-3 space-y-1.5 border-t border-linha pt-3">
+                      {veiculoInteresse && (
+                        <p className="flex items-center gap-1.5 text-[13px] text-inkDim">
+                          <CarIcon size={13} className="shrink-0 text-inkFaint" />
+                          Interesse em: {veiculoInteresse.marca} {veiculoInteresse.modelo} {veiculoInteresse.versao} — {brl(veiculoInteresse.preco)}
+                        </p>
+                      )}
+                      <DetalhesExtras troca={l.veiculo_troca} />
+                      {l.mensagem && <p className="text-[13px] text-inkDim">{l.mensagem}</p>}
+                    </div>
+                  )}
+
+                  <a href={`https://wa.me/55${l.telefone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer"
+                    className="mt-3 inline-flex rounded-[3px] bg-zap px-3 py-2 text-xs font-semibold text-white">
+                    Responder no WhatsApp
+                  </a>
+                </div>
+              );
+            })}
+            {leadsFiltrados.length === 0 && (
+              <p className="rounded border border-dashed border-linha py-10 text-center text-sm text-inkDim">
+                {leads.length === 0 ? "Nenhum lead ainda." : "Nenhum lead com esses filtros."}
+              </p>
+            )}
+          </div>
+        </>
       )}
 
       {aba === "banners" && (
