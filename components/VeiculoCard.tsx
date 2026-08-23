@@ -1,21 +1,41 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Car } from "lucide-react";
 import { type Veiculo, brl, formatKm, capaDe } from "@/lib/supabase";
 import { useRevela } from "@/lib/useRevela";
 
+const INTERVALO_CICLO_MS = 700; // troca de foto no hover — sempre abaixo de 1s
+
 export default function VeiculoCard({
   v, prioridade, indice = 0,
 }: { v: Veiculo; prioridade?: boolean; indice?: number }) {
   const capa = capaDe(v);
-  const qtd = v.veiculo_fotos?.length ?? 0;
-  // Segunda foto do carro (por ordem), pra trocar no hover — igual à referência.
-  // Se só existe 1 foto, fica null e o hover mantém só o zoom de sempre.
-  const segunda = [...(v.veiculo_fotos ?? [])]
-    .sort((a, b) => a.ordem - b.ordem)
-    .find((f) => f !== capa) ?? null;
+  // Fotos na ordem de exibição, sempre começando pela capa (foto 1).
+  const fotosCiclo = capa
+    ? [capa, ...[...(v.veiculo_fotos ?? [])].sort((a, b) => a.ordem - b.ordem).filter((f) => f !== capa)]
+    : [];
+  const qtd = fotosCiclo.length;
+
+  const [indiceAtivo, setIndiceAtivo] = useState(0);
+  const [interagiu, setInteragiu] = useState(false); // só carrega as demais fotos após o 1º hover
+  const intervaloRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function iniciarCiclo() {
+    setInteragiu(true);
+    if (qtd < 2 || intervaloRef.current) return;
+    intervaloRef.current = setInterval(() => {
+      setIndiceAtivo((i) => (i + 1) % qtd);
+    }, INTERVALO_CICLO_MS);
+  }
+  function pararCiclo() {
+    if (intervaloRef.current) { clearInterval(intervaloRef.current); intervaloRef.current = null; }
+    setIndiceAtivo(0);
+  }
+  useEffect(() => () => { if (intervaloRef.current) clearInterval(intervaloRef.current); }, []);
+
   // Ref/transição de entrada ficam num wrapper — não no próprio Link, pra não
   // brigar com a transição de hover (".cartao", em globals.css: all .18s).
   const { ref, visivel } = useRevela<HTMLDivElement>();
@@ -23,31 +43,31 @@ export default function VeiculoCard({
   return (
     <div
       ref={ref}
-      style={{ transitionDelay: visivel ? `${(indice % 3) * 100}ms` : "0ms" }}
-      className={`transition-[opacity,transform] duration-700 ease-[cubic-bezier(.16,1,.3,1)] ${
-        visivel ? "translate-y-0 scale-100 opacity-100" : "translate-y-7 scale-[.94] opacity-0"
+      style={{ transitionDelay: visivel ? `${(indice % 3) * 90}ms` : "0ms" }}
+      className={`transition-[opacity,transform] duration-500 ease-out ${
+        visivel ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
       }`}
     >
     <Link
       href={`/veiculo/${v.slug}`}
+      onMouseEnter={iniciarCiclo}
+      onMouseLeave={pararCiclo}
       className="cartao group block overflow-hidden rounded border border-linha bg-card"
     >
       <div className="foto relative aspect-[3/2] overflow-hidden bg-bg1">
-        {capa ? (
-          <Image src={capa.url_thumb ?? capa.url} alt={`${v.marca} ${v.modelo} ${v.versao ?? ""}`}
-            fill priority={prioridade} sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
-            className={`object-cover transition-opacity duration-300 ${segunda ? "group-hover:opacity-0" : ""}`} />
+        {qtd > 0 ? (
+          fotosCiclo.map((f, i) => (
+            (i === 0 || interagiu) && (
+              <Image key={f.url} src={f.url_thumb ?? f.url} alt={`${v.marca} ${v.modelo} ${v.versao ?? ""}`}
+                fill priority={prioridade && i === 0} sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
+                className={`object-cover transition-opacity duration-300 ${indiceAtivo === i ? "opacity-100" : "opacity-0"}`} />
+            )
+          ))
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-2">
             <Car size={34} strokeWidth={1} className="text-ouro/30" />
             <span className="font-mono text-[9px] tracking-[0.14em] text-inkFaint">FOTO PENDENTE</span>
           </div>
-        )}
-
-        {segunda && (
-          <Image src={segunda.url_thumb ?? segunda.url} alt={`${v.marca} ${v.modelo} ${v.versao ?? ""} — outro ângulo`}
-            fill sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
-            className="object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
         )}
 
         <div className="absolute left-3 top-3 flex gap-2">
@@ -67,18 +87,13 @@ export default function VeiculoCard({
       </div>
 
       <div className="p-4">
-        <h3 className="relative inline-block font-display text-lg uppercase tracking-[0.02em]">
-          {v.marca} {v.modelo}
-          <span className="absolute -bottom-0.5 left-0 h-px w-0 bg-ouro transition-[width] duration-500 ease-out group-hover:w-full" />
-        </h3>
+        <h3 className="font-display text-lg uppercase tracking-[0.02em]">{v.marca} {v.modelo}</h3>
         <p className="mt-0.5 min-h-[19px] text-[13px] text-inkDim">{v.versao}</p>
-        <div className="mt-3 border-b border-linha pb-3 font-mono text-[11px] tracking-[0.04em] text-inkFaint transition-colors duration-500 group-hover:border-ouro/40">
+        <div className="mt-3 border-b border-linha pb-3 font-mono text-[11px] tracking-[0.04em] text-inkFaint">
           {v.ano_fabricacao}/{v.ano_modelo} · {formatKm(v.km)} · {v.cambio}
         </div>
         {v.preco_de && <div className="mt-3 font-mono text-[11px] text-inkFaint line-through">{brl(v.preco_de)}</div>}
-        <div className="font-display text-2xl text-ouro transition-transform duration-500 ease-out group-hover:-translate-y-0.5">
-          {brl(v.preco)}
-        </div>
+        <div className="font-display text-2xl text-ouro">{brl(v.preco)}</div>
       </div>
     </Link>
     </div>
