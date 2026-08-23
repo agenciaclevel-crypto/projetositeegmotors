@@ -166,7 +166,7 @@ export default async function PaginaVeiculo({
             )}
             <div className="font-display text-4xl text-[#C7A25C]">{brl(v.preco)}</div>
 
-            <Simulador preco={v.preco} />
+            <Simulador preco={v.preco} loja={loja} veiculoId={v.id} nomeVeiculo={nome} />
 
             <FormLead lojaId={loja.id} veiculoId={v.id} nomeVeiculo={nome} />
 
