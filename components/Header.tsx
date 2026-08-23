@@ -49,10 +49,13 @@ export default function Header({ loja }: { loja: Loja }) {
       <div className="mx-auto flex max-w-[1180px] items-center justify-between px-5 py-4">
         <Link href="/" onClick={() => setAberto(false)} className="flex items-center">
           {loja.logo_claro_url ? (
-            <div className={`overflow-hidden transition-[max-width] duration-500 ease-out ${
-              rolando ? "max-w-[40px]" : "max-w-[160px]"}`}>
+            // A logo é o brasão "EG" empilhado em cima do texto "MOTORS" (não lado a lado),
+            // então o corte da animação é na ALTURA, não na largura: encolhe até o pé do
+            // brasão (~29px de 40px = 70% da imagem), escondendo só a palavra "MOTORS".
+            <div className={`overflow-hidden transition-[max-height] duration-500 ease-out ${
+              rolando ? "max-h-[29px]" : "max-h-10"}`}>
               <Image src={loja.logo_claro_url} alt={loja.nome} width={160} height={40}
-                className="h-10 w-auto max-w-none" priority />
+                className="block h-10 w-auto" priority />
             </div>
           ) : (
             <span className="flex items-baseline font-display text-lg uppercase tracking-[0.06em]">
