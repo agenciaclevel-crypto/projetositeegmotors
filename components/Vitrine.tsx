@@ -124,7 +124,7 @@ export default function Vitrine({ veiculos }: { veiculos: Veiculo[] }) {
         </div>
       ) : (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {lista.map((v, i) => <VeiculoCard key={v.id} v={v} prioridade={i < 3} />)}
+          {lista.map((v, i) => <VeiculoCard key={v.id} v={v} prioridade={i < 3} indice={i} />)}
         </div>
       )}
     </>

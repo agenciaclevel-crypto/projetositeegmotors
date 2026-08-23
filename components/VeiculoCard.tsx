@@ -1,15 +1,32 @@
+"use client";
+
 import Link from "next/link";
 import Image from "next/image";
 import { Car } from "lucide-react";
 import { type Veiculo, brl, formatKm, capaDe } from "@/lib/supabase";
+import { useRevela } from "@/lib/useRevela";
 
-export default function VeiculoCard({ v, prioridade }: { v: Veiculo; prioridade?: boolean }) {
+export default function VeiculoCard({
+  v, prioridade, indice = 0,
+}: { v: Veiculo; prioridade?: boolean; indice?: number }) {
   const capa = capaDe(v);
   const qtd = v.veiculo_fotos?.length ?? 0;
+  // Ref/transição de entrada ficam num wrapper — não no próprio Link, pra não
+  // brigar com a transição de hover (".cartao", em globals.css: all .18s).
+  const { ref, visivel } = useRevela<HTMLDivElement>();
 
   return (
-    <Link href={`/veiculo/${v.slug}`}
-      className="cartao block overflow-hidden rounded border border-linha bg-card">
+    <div
+      ref={ref}
+      style={{ transitionDelay: visivel ? `${(indice % 3) * 90}ms` : "0ms" }}
+      className={`transition-[opacity,transform] duration-500 ease-out ${
+        visivel ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
+      }`}
+    >
+    <Link
+      href={`/veiculo/${v.slug}`}
+      className="cartao block overflow-hidden rounded border border-linha bg-card"
+    >
       <div className="foto relative aspect-[3/2] overflow-hidden bg-bg1">
         {capa ? (
           <Image src={capa.url_thumb ?? capa.url} alt={`${v.marca} ${v.modelo} ${v.versao ?? ""}`}
@@ -48,5 +65,6 @@ export default function VeiculoCard({ v, prioridade }: { v: Veiculo; prioridade?
         <div className="font-display text-2xl text-ouro">{brl(v.preco)}</div>
       </div>
     </Link>
+    </div>
   );
 }

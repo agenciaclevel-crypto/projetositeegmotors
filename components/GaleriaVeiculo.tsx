@@ -1,32 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import type { Foto } from "@/lib/supabase";
-
-/** Revela o elemento com uma animação assim que ele entra na tela ao rolar. */
-function useRevela<T extends HTMLElement>() {
-  const ref = useRef<T>(null);
-  const [visivel, setVisivel] = useState(false);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const obs = new IntersectionObserver(
-      ([entrada]) => {
-        if (entrada.isIntersecting) {
-          setVisivel(true);
-          obs.disconnect();
-        }
-      },
-      { threshold: 0.15, rootMargin: "0px 0px -40px 0px" }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, []);
-
-  return { ref, visivel };
-}
+import { useRevela } from "@/lib/useRevela";
 
 export default function GaleriaVeiculo({ fotos, nome }: { fotos: Foto[]; nome: string }) {
   const principal = useRevela<HTMLDivElement>();
