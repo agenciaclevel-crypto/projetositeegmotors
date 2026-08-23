@@ -23,9 +23,9 @@ export default function VeiculoCard({
   return (
     <div
       ref={ref}
-      style={{ transitionDelay: visivel ? `${(indice % 3) * 90}ms` : "0ms" }}
-      className={`transition-[opacity,transform] duration-500 ease-out ${
-        visivel ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
+      style={{ transitionDelay: visivel ? `${(indice % 3) * 100}ms` : "0ms" }}
+      className={`transition-[opacity,transform] duration-700 ease-[cubic-bezier(.16,1,.3,1)] ${
+        visivel ? "translate-y-0 scale-100 opacity-100" : "translate-y-7 scale-[.94] opacity-0"
       }`}
     >
     <Link
@@ -67,13 +67,18 @@ export default function VeiculoCard({
       </div>
 
       <div className="p-4">
-        <h3 className="font-display text-lg uppercase tracking-[0.02em]">{v.marca} {v.modelo}</h3>
+        <h3 className="relative inline-block font-display text-lg uppercase tracking-[0.02em]">
+          {v.marca} {v.modelo}
+          <span className="absolute -bottom-0.5 left-0 h-px w-0 bg-ouro transition-[width] duration-500 ease-out group-hover:w-full" />
+        </h3>
         <p className="mt-0.5 min-h-[19px] text-[13px] text-inkDim">{v.versao}</p>
-        <div className="mt-3 border-b border-linha pb-3 font-mono text-[11px] tracking-[0.04em] text-inkFaint">
+        <div className="mt-3 border-b border-linha pb-3 font-mono text-[11px] tracking-[0.04em] text-inkFaint transition-colors duration-500 group-hover:border-ouro/40">
           {v.ano_fabricacao}/{v.ano_modelo} · {formatKm(v.km)} · {v.cambio}
         </div>
         {v.preco_de && <div className="mt-3 font-mono text-[11px] text-inkFaint line-through">{brl(v.preco_de)}</div>}
-        <div className="font-display text-2xl text-ouro">{brl(v.preco)}</div>
+        <div className="font-display text-2xl text-ouro transition-transform duration-500 ease-out group-hover:-translate-y-0.5">
+          {brl(v.preco)}
+        </div>
       </div>
     </Link>
     </div>
