@@ -11,6 +11,11 @@ export default function VeiculoCard({
 }: { v: Veiculo; prioridade?: boolean; indice?: number }) {
   const capa = capaDe(v);
   const qtd = v.veiculo_fotos?.length ?? 0;
+  // Segunda foto do carro (por ordem), pra trocar no hover — igual à referência.
+  // Se só existe 1 foto, fica null e o hover mantém só o zoom de sempre.
+  const segunda = [...(v.veiculo_fotos ?? [])]
+    .sort((a, b) => a.ordem - b.ordem)
+    .find((f) => f !== capa) ?? null;
   // Ref/transição de entrada ficam num wrapper — não no próprio Link, pra não
   // brigar com a transição de hover (".cartao", em globals.css: all .18s).
   const { ref, visivel } = useRevela<HTMLDivElement>();
@@ -25,18 +30,24 @@ export default function VeiculoCard({
     >
     <Link
       href={`/veiculo/${v.slug}`}
-      className="cartao block overflow-hidden rounded border border-linha bg-card"
+      className="cartao group block overflow-hidden rounded border border-linha bg-card"
     >
       <div className="foto relative aspect-[3/2] overflow-hidden bg-bg1">
         {capa ? (
           <Image src={capa.url_thumb ?? capa.url} alt={`${v.marca} ${v.modelo} ${v.versao ?? ""}`}
             fill priority={prioridade} sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
-            className="object-cover" />
+            className={`object-cover transition-opacity duration-300 ${segunda ? "group-hover:opacity-0" : ""}`} />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-2">
             <Car size={34} strokeWidth={1} className="text-ouro/30" />
             <span className="font-mono text-[9px] tracking-[0.14em] text-inkFaint">FOTO PENDENTE</span>
           </div>
+        )}
+
+        {segunda && (
+          <Image src={segunda.url_thumb ?? segunda.url} alt={`${v.marca} ${v.modelo} ${v.versao ?? ""} — outro ângulo`}
+            fill sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
+            className="object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
         )}
 
         <div className="absolute left-3 top-3 flex gap-2">
