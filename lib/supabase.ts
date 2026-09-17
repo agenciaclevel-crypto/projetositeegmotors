@@ -30,6 +30,7 @@ export type Loja = {
 };
 
 export type Foto = {
+  id: string;
   url: string;
   url_thumb: string | null;
   ordem: number;
@@ -79,7 +80,7 @@ const CAMPOS_VEICULO = `
   cambio, combustivel, motor, potencia_cv, cor, carroceria, portas,
   condicao, preco, preco_de, opcionais, observacoes,
   laudo_cautelar, unico_dono, destaque,
-  veiculo_fotos ( url, url_thumb, ordem, capa )
+  veiculo_fotos ( id, url, url_thumb, ordem, capa )
 `;
 
 /* ---------------------------------------------------------------- */
