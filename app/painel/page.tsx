@@ -96,7 +96,7 @@ export default function Painel() {
 
     const [v, l, b, lj] = await Promise.all([
       supabase.from("veiculos")
-        .select("*, veiculo_fotos(url,url_thumb,ordem,capa)")
+        .select("*, veiculo_fotos(id,url,url_thumb,ordem,capa)")
         .eq("loja_id", perfil.loja_id).order("criado_em", { ascending: false }),
       supabase.from("leads").select("*")
         .eq("loja_id", perfil.loja_id).order("criado_em", { ascending: false }).limit(50),
