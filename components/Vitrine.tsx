@@ -16,19 +16,33 @@ export default function Vitrine({ veiculos }: { veiculos: Veiculo[] }) {
   const [cambio, setCambio] = useState("Todos");
   const [ordem, setOrdem] = useState("destaque");
 
-  const marcas = useMemo(
-    () => Array.from(new Set(veiculos.map((v) => v.marca))).sort(), [veiculos]);
+  // Marca é texto livre digitado no painel — "Fiat", "FIAT" e "fiat" são o
+  // mesmo filtro. Agrupa pela grafia normalizada e usa a primeira grafia
+  // encontrada só pra exibir o rótulo.
+  const chaveMarca = (m: string) => m.trim().toLowerCase();
+
+  const marcas = useMemo(() => {
+    const rotulos = new Map<string, string>();
+    veiculos.forEach((v) => {
+      const chave = chaveMarca(v.marca);
+      if (!rotulos.has(chave)) rotulos.set(chave, v.marca.trim());
+    });
+    return Array.from(rotulos.entries()).sort((a, b) => a[1].localeCompare(b[1], "pt-BR"));
+  }, [veiculos]);
 
   const contagemPorMarca = useMemo(() => {
     const m = new Map<string, number>();
-    veiculos.forEach((v) => m.set(v.marca, (m.get(v.marca) ?? 0) + 1));
+    veiculos.forEach((v) => {
+      const chave = chaveMarca(v.marca);
+      m.set(chave, (m.get(chave) ?? 0) + 1);
+    });
     return m;
   }, [veiculos]);
 
   const lista = useMemo(() => {
     let r = veiculos.filter((v) =>
       `${v.marca} ${v.modelo} ${v.versao ?? ""}`.toLowerCase().includes(busca.toLowerCase()) &&
-      (marca === "todas" || v.marca === marca) &&
+      (marca === "todas" || chaveMarca(v.marca) === marca) &&
       (condicao === "todos" || v.condicao === condicao) &&
       (cambio === "Todos" || v.cambio === cambio));
     if (ordem === "menor") r = [...r].sort((a, b) => a.preco - b.preco);
@@ -62,11 +76,11 @@ export default function Vitrine({ veiculos }: { veiculos: Veiculo[] }) {
 
       {marcas.length > 0 && (
         <div className="mt-6 grid grid-cols-3 gap-2.5 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-          {marcas.map((m) => {
-            const logo = logoDaMarca(m);
-            const ativa = marca === m;
+          {marcas.map(([chave, rotulo]) => {
+            const logo = logoDaMarca(rotulo);
+            const ativa = marca === chave;
             return (
-              <button key={m} onClick={() => setMarca(ativa ? "todas" : m)}
+              <button key={chave} onClick={() => setMarca(ativa ? "todas" : chave)}
                 aria-pressed={ativa}
                 className={`flex flex-col items-center gap-2 rounded-[3px] border px-2 py-4 transition-colors ${
                   ativa ? "border-ouro bg-ouro/10" : "border-linha bg-bg1 hover:border-ouro/50"}`}>
@@ -76,11 +90,11 @@ export default function Vitrine({ veiculos }: { veiculos: Veiculo[] }) {
                       <path d={logo.path} />
                     </svg>
                   ) : (
-                    <span className="font-display text-sm text-bg0">{m.slice(0, 2).toUpperCase()}</span>
+                    <span className="font-display text-sm text-bg0">{rotulo.slice(0, 2).toUpperCase()}</span>
                   )}
                 </span>
-                <span className="line-clamp-1 text-center text-[11px] font-medium leading-tight text-inkDim">{m}</span>
-                <span className="font-mono text-[9px] text-inkFaint">{contagemPorMarca.get(m)}</span>
+                <span className="line-clamp-1 text-center text-[11px] font-medium leading-tight text-inkDim">{rotulo}</span>
+                <span className="font-mono text-[9px] text-inkFaint">{contagemPorMarca.get(chave)}</span>
               </button>
             );
           })}

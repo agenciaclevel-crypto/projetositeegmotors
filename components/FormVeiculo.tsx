@@ -1,15 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { X, Upload, Camera, ImagePlus, Trash2 } from "lucide-react";
-import { supabase, type Veiculo } from "@/lib/supabase";
+import { X, Upload, Camera, ImagePlus, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { supabase, type Veiculo, type Foto } from "@/lib/supabase";
 import { prepararFotos, kb, type FotoPronta } from "@/lib/imagem";
 
 const campo = "w-full rounded-[3px] border border-linha bg-bg1 px-3 py-2.5 text-sm text-ink";
 const rotulo = "mb-1.5 block font-mono text-[9px] uppercase tracking-[0.14em] text-inkFaint";
 
 const gerarSlug = (s: string) =>
-  s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+  s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
     .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
 export default function FormVeiculo({
@@ -17,9 +17,9 @@ export default function FormVeiculo({
 }: { veiculo: Partial<Veiculo>; lojaId: string; fechar: () => void; salvo: () => void }) {
   const [v, setV] = useState<any>({
     marca: "", modelo: "", versao: "", ano_fabricacao: 2024, ano_modelo: 2025,
-    km: 0, cambio: "Automático", combustivel: "Flex", cor: "", carroceria: "SUV",
-    portas: 4, condicao: "seminovo", preco: 0, preco_de: null, opcionais: [],
-    observacoes: "", publicado: true, destaque: false, ...veiculo,
+    km: 0, cambio: "Automático", combustivel: "Flex", motor: "", potencia_cv: null,
+    cor: "", carroceria: "SUV", portas: 4, condicao: "seminovo", preco: 0, preco_de: null,
+    opcionais: [], observacoes: "", publicado: true, destaque: false, ...veiculo,
   });
   const [fotos, setFotos] = useState<FotoPronta[]>([]);
   const [previas, setPrevias] = useState<string[]>([]);
@@ -27,6 +27,13 @@ export default function FormVeiculo({
   const [salvando, setSalvando] = useState(false);
   const [progresso, setProgresso] = useState("");
   const [erro, setErro] = useState("");
+
+  // Fotos já salvas no veículo (só existe algo aqui quando é edição). Dá pra
+  // remover e reordenar na hora — cada ação já grava direto no banco.
+  const [fotosExistentes, setFotosExistentes] = useState<Foto[]>(
+    () => [...(veiculo.veiculo_fotos ?? [])].sort((a, b) => a.ordem - b.ordem)
+  );
+  const [ordenando, setOrdenando] = useState(false);
 
   async function escolherFotos(lista: FileList | null) {
     const arquivos = Array.from(lista ?? []);
@@ -43,6 +50,37 @@ export default function FormVeiculo({
     URL.revokeObjectURL(previas[i]);
     setFotos((f) => f.filter((_, j) => j !== i));
     setPrevias((p) => p.filter((_, j) => j !== i));
+  }
+
+  function persistirOrdem(lista: Foto[]) {
+    return Promise.all(lista.map((f) =>
+      supabase.from("veiculo_fotos").update({ ordem: f.ordem, capa: f.capa }).eq("id", f.id)
+    ));
+  }
+
+  async function moverFotoExistente(indice: number, direcao: -1 | 1) {
+    const alvo = indice + direcao;
+    if (alvo < 0 || alvo >= fotosExistentes.length || ordenando) return;
+    const nova = [...fotosExistentes];
+    [nova[indice], nova[alvo]] = [nova[alvo], nova[indice]];
+    const comOrdem = nova.map((f, i) => ({ ...f, ordem: i, capa: i === 0 }));
+    setFotosExistentes(comOrdem);
+    setOrdenando(true);
+    await persistirOrdem(comOrdem);
+    setOrdenando(false);
+  }
+
+  async function removerFotoExistente(foto: Foto) {
+    if (!confirm("Remover esta foto do veículo?")) return;
+    const { error } = await supabase.from("veiculo_fotos").delete().eq("id", foto.id);
+    if (error) { alert(`Falha ao remover a foto: ${error.message}`); return; }
+    const restante = fotosExistentes
+      .filter((f) => f.id !== foto.id)
+      .map((f, i) => ({ ...f, ordem: i, capa: i === 0 }));
+    setFotosExistentes(restante);
+    setOrdenando(true);
+    await persistirOrdem(restante);
+    setOrdenando(false);
   }
 
   const pesoTotal = fotos.reduce((s, f) => s + f.grande.size + f.thumb.size, 0);
@@ -76,12 +114,13 @@ export default function FormVeiculo({
 
     if (error) { setErro(error.message); setSalvando(false); return; }
 
-    // sobe grande + thumb já em WebP
-    const marca = Date.now();
+    // sobe grande + thumb já em WebP, continuando a ordem depois das fotos
+    // que já existiam (se for edição)
+    const carimbo = Date.now();
     for (let i = 0; i < fotos.length; i++) {
       const f = fotos[i];
       setProgresso(`Enviando foto ${i + 1} de ${fotos.length}...`);
-      const nome = `${slug}/${marca}-${String(i).padStart(2, "0")}`;
+      const nome = `${slug}/${carimbo}-${String(i).padStart(2, "0")}`;
 
       const [g, t] = await Promise.all([
         supabase.storage.from("veiculos").upload(`${nome}.webp`, f.grande,
@@ -97,7 +136,8 @@ export default function FormVeiculo({
         : supabase.storage.from("veiculos").getPublicUrl(`${nome}-thumb.webp`).data.publicUrl;
 
       await supabase.from("veiculo_fotos").insert({
-        veiculo_id: data!.id, url, url_thumb: thumb, ordem: i, capa: i === 0 && !v.id,
+        veiculo_id: data!.id, url, url_thumb: thumb,
+        ordem: fotosExistentes.length + i, capa: i === 0 && fotosExistentes.length === 0,
       });
     }
 
@@ -150,6 +190,11 @@ export default function FormVeiculo({
               <option>Flex</option><option>Gasolina</option><option>Diesel</option><option>Híbrido</option><option>Elétrico</option>
             </select></label>
           <label><span className={rotulo}>Cor</span><input value={v.cor ?? ""} onChange={set("cor")} className={campo} /></label>
+          <label><span className={rotulo}>Motor</span>
+            <input value={v.motor ?? ""} onChange={set("motor")} className={campo} placeholder="2.0 Turbo Flex" /></label>
+          <label><span className={rotulo}>Potência (cv)</span>
+            <input type="number" value={v.potencia_cv ?? ""} className={campo} placeholder="170"
+              onChange={(e) => setV({ ...v, potencia_cv: e.target.value ? Number(e.target.value) : null })} /></label>
 
           <label className="sm:col-span-2"><span className={rotulo}>Itens de série (um por linha)</span>
             <textarea rows={4} className={`${campo} resize-y`} value={(v.opcionais ?? []).join("\n")}
@@ -158,9 +203,46 @@ export default function FormVeiculo({
           <label className="sm:col-span-2"><span className={rotulo}>Observações</span>
             <textarea rows={2} value={v.observacoes ?? ""} onChange={set("observacoes")} className={`${campo} resize-y`} /></label>
 
+          {fotosExistentes.length > 0 && (
+            <div className="sm:col-span-2">
+              <span className={rotulo}>Fotos atuais · {fotosExistentes.length}</span>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                {fotosExistentes.map((f, i) => (
+                  <div key={f.id} className="relative overflow-hidden rounded-[3px] border border-linha">
+                    <img src={f.url_thumb ?? f.url} alt="" className="block aspect-[3/2] w-full object-cover" />
+                    {f.capa && (
+                      <span className="absolute left-1 top-1 rounded-sm bg-ouro px-1.5 py-0.5 font-mono text-[8px] tracking-[0.1em] text-bg0">
+                        CAPA
+                      </span>
+                    )}
+                    <button type="button" onClick={() => removerFotoExistente(f)} aria-label="Remover foto"
+                      className="absolute right-1 top-1 rounded-sm bg-bg0/80 p-1">
+                      <Trash2 size={12} className="text-inkDim" />
+                    </button>
+                    <div className="absolute inset-x-1 bottom-1 flex justify-center gap-1">
+                      <button type="button" onClick={() => moverFotoExistente(i, -1)} disabled={i === 0 || ordenando}
+                        aria-label="Mover foto para trás" className="rounded-sm bg-bg0/80 p-1 disabled:opacity-30">
+                        <ChevronLeft size={12} className="text-inkDim" />
+                      </button>
+                      <button type="button" onClick={() => moverFotoExistente(i, 1)}
+                        disabled={i === fotosExistentes.length - 1 || ordenando}
+                        aria-label="Mover foto para frente" className="rounded-sm bg-bg0/80 p-1 disabled:opacity-30">
+                        <ChevronRight size={12} className="text-inkDim" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] text-inkFaint">
+                As setas mudam a ordem — a primeira foto vira a capa do anúncio.
+              </p>
+            </div>
+          )}
+
           <div className="sm:col-span-2">
             <span className={rotulo}>
-              Fotos {fotos.length > 0 && `· ${fotos.length} prontas · ${kb(pesoTotal)}`}
+              {fotosExistentes.length > 0 ? "Adicionar mais fotos" : "Fotos"}
+              {fotos.length > 0 && ` · ${fotos.length} prontas · ${kb(pesoTotal)}`}
             </span>
 
             {previas.length > 0 && (
@@ -168,7 +250,7 @@ export default function FormVeiculo({
                 {previas.map((src, i) => (
                   <div key={src} className="relative overflow-hidden rounded-[3px] border border-linha">
                     <img src={src} alt="" className="block aspect-[3/2] w-full object-cover" />
-                    {i === 0 && (
+                    {i === 0 && fotosExistentes.length === 0 && (
                       <span className="absolute left-1 top-1 rounded-sm bg-ouro px-1.5 py-0.5 font-mono text-[8px] tracking-[0.1em] text-bg0">
                         CAPA
                       </span>
@@ -204,11 +286,11 @@ export default function FormVeiculo({
               <p className="mt-2 text-[11px] text-verde">
                 Convertidas para WebP no próprio aparelho — {ganhoMedio}% mais leves que os originais.
               </p>
-            ) : (
+            ) : fotosExistentes.length === 0 ? (
               <p className="mt-2 text-[11px] text-inkFaint">
                 A primeira foto vira a capa. Fotografe na horizontal, com o carro centralizado.
               </p>
-            )}
+            ) : null}
           </div>
 
           <div className="flex flex-wrap gap-5 sm:col-span-2">
