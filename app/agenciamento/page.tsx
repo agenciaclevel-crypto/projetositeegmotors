@@ -1,14 +1,19 @@
 import type { Metadata } from "next";
 import { CheckCircle2 } from "lucide-react";
 import { getLoja } from "@/lib/supabase";
+import { regiaoCurta } from "@/lib/seo";
 import FormAgenciamento from "@/components/FormAgenciamento";
 
 export const revalidate = 300;
 
-export const metadata: Metadata = {
-  title: "Agenciamento de veículos",
-  description: "Deixe seu carro conosco para anunciar, negociar e vender — sem precisar vendê-lo direto para a loja.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const loja = await getLoja();
+  return {
+    title: `Agenciamento de veículos em ${regiaoCurta(loja)}`,
+    description: `Deixe seu carro com a ${loja.nome}, em ${regiaoCurta(loja)}, para anunciar, negociar e vender — sem precisar vendê-lo direto para a loja.`,
+    alternates: { canonical: "/agenciamento" },
+  };
+}
 
 const BENEFICIOS = [
   "Seu carro anunciado nos principais canais, com fotos profissionais",

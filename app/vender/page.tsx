@@ -1,13 +1,18 @@
 import type { Metadata } from "next";
 import { getLoja } from "@/lib/supabase";
+import { regiaoCurta } from "@/lib/seo";
 import FormReposicao from "@/components/FormReposicao";
 
 export const revalidate = 300;
 
-export const metadata: Metadata = {
-  title: "Venda ou troque seu carro",
-  description: "Avaliação sem compromisso, proposta no mesmo dia e transferência feita na loja.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const loja = await getLoja();
+  return {
+    title: `Venda ou troque seu carro em ${regiaoCurta(loja)}`,
+    description: `Avaliamos seu carro em ${regiaoCurta(loja)} sem compromisso: proposta no mesmo dia, pagamento à vista e transferência feita na loja.`,
+    alternates: { canonical: "/vender" },
+  };
+}
 
 export default async function Vender() {
   const loja = await getLoja();

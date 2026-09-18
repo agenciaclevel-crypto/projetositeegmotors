@@ -1,17 +1,22 @@
 import type { Metadata } from "next";
 import { MapPin, Phone, Instagram, Clock, MessageCircle } from "lucide-react";
 import { getLoja, linkWhatsApp } from "@/lib/supabase";
+import { enderecoCompleto, regiaoCurta } from "@/lib/seo";
 
 export const revalidate = 300;
 
-export const metadata: Metadata = {
-  title: "Contato e localização",
-  description: "Endereço, horário de atendimento e rota até a loja.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const loja = await getLoja();
+  return {
+    title: `Contato e endereço em ${regiaoCurta(loja)}`,
+    description: `A ${loja.nome} fica na ${enderecoCompleto(loja)}. Veja horário de atendimento, WhatsApp e trace a rota até a loja.`,
+    alternates: { canonical: "/contato" },
+  };
+}
 
 export default async function Contato() {
   const loja = await getLoja();
-  const endereco = `${loja.endereco}, ${loja.bairro}, ${loja.cidade} - ${loja.uf}`;
+  const endereco = enderecoCompleto(loja);
   const mapa = `https://www.google.com/maps?q=${encodeURIComponent(endereco)}&output=embed`;
   const rota = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(endereco)}`;
 

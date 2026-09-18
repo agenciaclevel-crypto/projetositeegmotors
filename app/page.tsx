@@ -1,10 +1,28 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import type { Metadata } from "next";
+import { ArrowRight, MapPin } from "lucide-react";
 import { getLoja, getVeiculos, getBanners } from "@/lib/supabase";
+import { CIDADES_ATENDIDAS, descricaoDaLoja, enderecoCompleto, regiaoCurta } from "@/lib/seo";
 import Banners from "@/components/Banners";
 import Vitrine from "@/components/Vitrine";
 
 export const revalidate = 300;
+
+export async function generateMetadata(): Promise<Metadata> {
+  const loja = await getLoja();
+  const onde = regiaoCurta(loja);
+  return {
+    title: `${loja.nome} — Carros novos e seminovos em ${onde}`,
+    description: descricaoDaLoja(loja),
+    alternates: { canonical: "/" },
+    openGraph: {
+      title: `${loja.nome} — Carros novos e seminovos em ${onde}`,
+      description: descricaoDaLoja(loja),
+      url: "/",
+      type: "website",
+    },
+  };
+}
 
 export default async function Home() {
   const loja = await getLoja();
@@ -12,6 +30,9 @@ export default async function Home() {
     getVeiculos(loja.id),
     getBanners(loja.id),
   ]);
+
+  const onde = regiaoCurta(loja);
+  const cidade = loja.cidade ?? "";
 
   return (
     <main>
@@ -21,7 +42,7 @@ export default async function Home() {
         <div className="sobe mb-3.5 flex items-center gap-3">
           <span className="h-px w-[26px] bg-ouro" />
           <span className="text-xs font-semibold uppercase tracking-[0.18em] text-ouro">
-            {veiculos.length} veículos no pátio · {loja.cidade}/{loja.uf}
+            {veiculos.length} veículos no pátio · {onde}
           </span>
         </div>
 
@@ -29,8 +50,9 @@ export default async function Home() {
           O carro certo,<br /><span className="text-ouro">com a procedência</span> que você merece.
         </h1>
 
-        <p className="sobe mt-4 max-w-[540px] text-[17px] leading-relaxed text-inkDim">
-          Novos e seminovos revisados, com laudo cautelar e transferência feita aqui na loja.
+        <p className="sobe mt-4 max-w-[560px] text-[17px] leading-relaxed text-inkDim">
+          Novos e seminovos revisados em {onde}, com laudo cautelar e transferência
+          feita aqui na loja.
         </p>
 
         <Vitrine veiculos={veiculos} />
@@ -50,6 +72,40 @@ export default async function Home() {
             </Link>
           </div>
         </div>
+
+        {/* Bloco regional: diz em texto, pro cliente e pro Google, onde a loja
+            fica e que região ela atende. */}
+        <section className="mt-14 border-t border-linha pt-12">
+          <h2 className="font-display text-[clamp(22px,3.4vw,30px)] uppercase leading-tight tracking-[0.02em]">
+            Loja de carros em {onde}
+          </h2>
+
+          <div className="mt-5 grid max-w-[900px] gap-4 text-[15px] leading-relaxed text-inkDim md:grid-cols-2">
+            <p>
+              A {loja.nome} fica na {enderecoCompleto(loja)}. No pátio você encontra
+              carros novos e seminovos revisados, com procedência verificada e laudo
+              cautelar — e a transferência sai aqui mesmo, sem você precisar correr atrás
+              de despachante.
+            </p>
+            <p>
+              Atendemos {cidade} e a região: {CIDADES_ATENDIDAS.join(", ")} e todo o
+              entorno. Trabalhamos com financiamento, troca do seu carro na entrada e
+              também com agenciamento, para quem prefere vender o próprio veículo com a
+              nossa estrutura.
+            </p>
+          </div>
+
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link href="/contato"
+              className="inline-flex items-center gap-2 rounded-[3px] border border-linha px-5 py-3 text-sm font-semibold text-inkDim transition-colors hover:border-ouro hover:text-ouro">
+              <MapPin size={16} /> Endereço e horários
+            </Link>
+            <Link href="/agenciamento"
+              className="inline-flex items-center gap-2 rounded-[3px] border border-linha px-5 py-3 text-sm font-semibold text-inkDim transition-colors hover:border-ouro hover:text-ouro">
+              Agenciamento de veículos <ArrowRight size={16} />
+            </Link>
+          </div>
+        </section>
       </section>
     </main>
   );

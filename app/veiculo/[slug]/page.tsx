@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import {
   getLoja, getVeiculo, getVeiculos, brl, formatKm, capaDe, linkWhatsApp,
 } from "@/lib/supabase";
+import { enderecoEstruturado, enderecoCompleto, siteUrl } from "@/lib/seo";
 import FormLead from "@/components/FormLead";
 import Simulador from "@/components/Simulador";
 import GaleriaVeiculo from "@/components/GaleriaVeiculo";
@@ -26,8 +27,10 @@ export async function generateMetadata({
   const v = await getVeiculo(loja.id, slug);
   if (!v) return { title: "Veículo não encontrado" };
 
-  const titulo = `${v.marca} ${v.modelo} ${v.versao ?? ""} ${v.ano_modelo} — ${brl(v.preco)} | ${loja.nome}`;
-  const descricao = `${v.marca} ${v.modelo} ${v.versao ?? ""} ${v.ano_fabricacao}/${v.ano_modelo}, ${formatKm(v.km)}, ${v.cambio}. À venda na ${loja.nome} em ${loja.cidade}/${loja.uf}.`;
+  // Sem o nome da loja no fim: o template do layout já acrescenta
+  // "| EG Motors — Natal/RN" em cima disso.
+  const titulo = `${v.marca} ${v.modelo} ${v.versao ?? ""} ${v.ano_modelo} — ${brl(v.preco)}`;
+  const descricao = `${v.marca} ${v.modelo} ${v.versao ?? ""} ${v.ano_fabricacao}/${v.ano_modelo}, ${formatKm(v.km)}, ${v.cambio}. À venda na ${loja.nome}, em ${enderecoCompleto(loja)}.`;
   const capa = capaDe(v);
 
   return {
@@ -54,11 +57,28 @@ export default async function PaginaVeiculo({
   const fotos = [...(v.veiculo_fotos ?? [])].sort((a, b) => a.ordem - b.ordem);
   const nome = `${v.marca} ${v.modelo} ${v.versao ?? ""}`.trim();
 
+  const base = siteUrl();
+  const urlDoCarro = `${base}/veiculo/${v.slug}`;
+  const condicao = v.condicao === "novo"
+    ? "https://schema.org/NewCondition"
+    : "https://schema.org/UsedCondition";
+
+  // A loja aparece aqui de novo (com endereço) porque é o que diz ao Google
+  // que este carro está à venda nesta cidade, e não em qualquer lugar.
+  const vendedor = {
+    "@type": "AutoDealer",
+    "@id": `${base}/#loja`,
+    name: loja.nome,
+    url: base,
+    address: enderecoEstruturado(loja),
+  };
+
   // Dados estruturados: é o que faz o preço e a foto aparecerem no Google.
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Car",
     name: nome,
+    url: urlDoCarro,
     brand: { "@type": "Brand", name: v.marca },
     model: v.modelo,
     vehicleModelDate: String(v.ano_modelo),
@@ -68,14 +88,39 @@ export default async function PaginaVeiculo({
     fuelType: v.combustivel,
     color: v.cor,
     numberOfDoors: v.portas,
+    itemCondition: condicao,
+    ...(v.motor || v.potencia_cv
+      ? {
+          vehicleEngine: {
+            "@type": "EngineSpecification",
+            ...(v.motor ? { name: v.motor } : {}),
+            ...(v.potencia_cv
+              ? { enginePower: { "@type": "QuantitativeValue", value: v.potencia_cv, unitText: "cv" } }
+              : {}),
+          },
+        }
+      : {}),
     image: fotos.map((f) => f.url),
     offers: {
       "@type": "Offer",
+      url: urlDoCarro,
       price: v.preco,
       priceCurrency: "BRL",
       availability: "https://schema.org/InStock",
-      seller: { "@type": "AutoDealer", name: loja.nome },
+      itemCondition: condicao,
+      seller: vendedor,
+      availableAtOrFrom: vendedor,
+      areaServed: { "@type": "City", name: loja.cidade },
     },
+  };
+
+  const jsonLdCaminho = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: `Estoque ${loja.cidade}/${loja.uf}`, item: base },
+      { "@type": "ListItem", position: 2, name: `${nome} ${v.ano_modelo}`, item: urlDoCarro },
+    ],
   };
 
   const ficha: [string, string][] = [
@@ -95,6 +140,10 @@ export default async function PaginaVeiculo({
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdCaminho) }}
       />
 
       <Link href="/" className="text-sm text-[#A6A9B2] hover:text-[#F3F0E9]">
@@ -176,6 +225,10 @@ export default async function PaginaVeiculo({
             >
               Chamar no WhatsApp
             </a>
+
+            <p className="mt-3 text-center text-[12px] leading-relaxed text-[#6E7280]">
+              Para ver de perto: {loja.nome}, {enderecoCompleto(loja)}.
+            </p>
           </div>
         </aside>
       </div>
