@@ -5,6 +5,9 @@ import { descricaoDaLoja, jsonLdLoja, regiaoCurta, siteUrl } from "@/lib/seo";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import BotaoZap from "@/components/BotaoZap";
+import MetaPixel from "@/components/MetaPixel";
+import GoogleAnalytics from "@/components/GoogleAnalytics";
+import RegistroVisita from "@/components/RegistroVisita";
 import "./globals.css";
 
 const display = Oswald({ subsets: ["latin"], weight: ["500", "600"], variable: "--fonte-display" });
@@ -49,6 +52,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdLoja(loja)) }}
         />
+        <MetaPixel />
+        <GoogleAnalytics />
+        <RegistroVisita lojaId={loja.id} />
         <Header loja={loja} />
         {children}
         <Footer loja={loja} />
