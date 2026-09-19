@@ -92,13 +92,29 @@ export default function FormVeiculo({
 
   const valido = v.marca?.trim() && v.modelo?.trim() && v.preco > 0;
 
+  /** O endereço do carro no site (slug) é único por loja. Se a loja tem dois
+   * carros iguais no pátio — mesmo modelo, versão e ano — o segundo precisa de
+   * um endereço próprio, senão o banco recusa o cadastro. */
+  async function slugLivre(base: string) {
+    const { data } = await supabase.from("veiculos")
+      .select("slug").eq("loja_id", lojaId).like("slug", `${base}%`);
+    const usados = new Set((data ?? []).map((r) => r.slug as string));
+    if (!usados.has(base)) return base;
+    for (let i = 2; i <= 50; i++) {
+      if (!usados.has(`${base}-${i}`)) return `${base}-${i}`;
+    }
+    return `${base}-${Date.now().toString(36)}`;
+  }
+
   async function salvar() {
     if (!valido) return;
     setSalvando(true); setErro("");
 
-    const slug = v.slug || gerarSlug(`${v.marca} ${v.modelo} ${v.versao ?? ""} ${v.ano_modelo}`);
-    const dados = {
-      loja_id: lojaId, slug,
+    const base = v.slug || gerarSlug(`${v.marca} ${v.modelo} ${v.versao ?? ""} ${v.ano_modelo}`);
+    let slug = v.id ? base : await slugLivre(base);
+
+    const dados = (s: string) => ({
+      loja_id: lojaId, slug: s,
       marca: v.marca, modelo: v.modelo, versao: v.versao,
       ano_fabricacao: v.ano_fabricacao, ano_modelo: v.ano_modelo,
       km: v.km, cambio: v.cambio, combustivel: v.combustivel, motor: v.motor,
@@ -106,16 +122,40 @@ export default function FormVeiculo({
       condicao: v.condicao, preco: v.preco, preco_de: v.preco_de,
       opcionais: v.opcionais, observacoes: v.observacoes,
       publicado: v.publicado, destaque: v.destaque,
-    };
+    });
 
-    const { data, error } = v.id
-      ? await supabase.from("veiculos").update(dados).eq("id", v.id).select("id").single()
-      : await supabase.from("veiculos").insert(dados).select("id").single();
+    let resposta = v.id
+      ? await supabase.from("veiculos").update(dados(slug)).eq("id", v.id).select("id").single()
+      : await supabase.from("veiculos").insert(dados(slug)).select("id").single();
 
-    if (error) { setErro(error.message); setSalvando(false); return; }
+    // 23505 = endereço repetido. Só acontece se o slug foi ocupado entre a
+    // checagem e o cadastro; tenta de novo com um sufixo único.
+    if (resposta.error && !v.id && resposta.error.code === "23505") {
+      slug = `${base}-${Date.now().toString(36)}`;
+      resposta = await supabase.from("veiculos").insert(dados(slug)).select("id").single();
+    }
 
-    // sobe grande + thumb já em WebP, continuando a ordem depois das fotos
-    // que já existiam (se for edição)
+    if (resposta.error) {
+      setErro(resposta.error.code === "23505"
+        ? "Já existe um veículo com esse mesmo endereço no site. Mude a versão ou o ano e tente de novo."
+        : resposta.error.message);
+      setSalvando(false);
+      return;
+    }
+
+    // Guarda o id assim que o veículo é criado: se o envio das fotos falhar no
+    // meio, um novo clique em salvar atualiza este carro em vez de cadastrar
+    // um segundo igual (que era o que estourava o erro de endereço repetido).
+    const idVeiculo = resposta.data!.id as string;
+    if (!v.id) setV((atual: any) => ({ ...atual, id: idVeiculo, slug }));
+
+    // Continua a numeração de onde as fotos do veículo pararam — vale tanto
+    // para edição quanto para uma segunda tentativa depois de falha.
+    const { count } = await supabase.from("veiculo_fotos")
+      .select("*", { count: "exact", head: true }).eq("veiculo_id", idVeiculo);
+    const jaTem = count ?? fotosExistentes.length;
+
+    // sobe grande + thumb já em WebP
     const carimbo = Date.now();
     for (let i = 0; i < fotos.length; i++) {
       const f = fotos[i];
@@ -129,15 +169,24 @@ export default function FormVeiculo({
           { upsert: true, contentType: "image/webp", cacheControl: "31536000" }),
       ]);
 
-      if (g.error) { setErro(`Falha ao enviar a foto ${i + 1}: ${g.error.message}`); setSalvando(false); return; }
+      if (g.error) {
+        // deixa na tela só o que ainda falta subir, pra tentativa seguinte não
+        // repetir as fotos que já entraram
+        setFotos(fotos.slice(i));
+        setPrevias(previas.slice(i));
+        setErro(`Falha ao enviar a foto ${i + 1}: ${g.error.message}`);
+        setProgresso("");
+        setSalvando(false);
+        return;
+      }
 
       const url = supabase.storage.from("veiculos").getPublicUrl(`${nome}.webp`).data.publicUrl;
       const thumb = t.error ? null
         : supabase.storage.from("veiculos").getPublicUrl(`${nome}-thumb.webp`).data.publicUrl;
 
       await supabase.from("veiculo_fotos").insert({
-        veiculo_id: data!.id, url, url_thumb: thumb,
-        ordem: fotosExistentes.length + i, capa: i === 0 && fotosExistentes.length === 0,
+        veiculo_id: idVeiculo, url, url_thumb: thumb,
+        ordem: jaTem + i, capa: jaTem === 0 && i === 0,
       });
     }
 
