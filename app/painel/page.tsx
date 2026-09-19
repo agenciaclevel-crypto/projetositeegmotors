@@ -2,8 +2,9 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Pencil, Trash2, Eye, EyeOff, Users, Package, LogOut, Image as ImageIcon, Store, Search, Car as CarIcon } from "lucide-react";
+import { Plus, Pencil, Trash2, Eye, EyeOff, Users, Package, LogOut, Image as ImageIcon, Store, Search, Car as CarIcon, BarChart3, ArrowUpRight, ArrowDownRight, ExternalLink } from "lucide-react";
 import { supabase, brl, formatKm, type Veiculo, type Banner, type Loja } from "@/lib/supabase";
+import { GA_RELATORIO } from "@/lib/rastreio";
 import FormVeiculo from "@/components/FormVeiculo";
 import FormBanner from "@/components/FormBanner";
 
@@ -20,6 +21,30 @@ const ROTULOS_STATUS: Record<string, string> = {
 const ROTULOS_ORIGEM: Record<string, string> = {
   site: "Site", agenciamento: "Agenciamento", financiamento: "Financiamento",
 };
+
+type Visita = {
+  visitante: string; caminho: string; origem: string | null; criado_em: string;
+};
+
+/** Teto da consulta de visitas. Suficiente com folga para o volume de uma
+ * loja; se um dia encostar nele, o painel esconde a comparação. */
+const LIMITE_VISITAS = 20000;
+
+/** Nomes bonitos para a lista de "de onde vem o acesso". O que não estiver
+ * aqui aparece com o próprio endereço do site de origem. */
+const ROTULOS_CANAL: Record<string, string> = {
+  direto: "Acesso direto", instagram: "Instagram", facebook: "Facebook",
+  whatsapp: "WhatsApp", google: "Google", busca: "Outros buscadores",
+  portais: "Portais de anúncio", youtube: "YouTube", tiktok: "TikTok",
+  linkedin: "LinkedIn",
+};
+
+/** Variação percentual contra o período anterior. null quando não há base de
+ * comparação — melhor não mostrar nada do que mostrar "+100%" de dois acessos. */
+function variacao(atual: number, anterior: number) {
+  if (!anterior) return null;
+  return Math.round(((atual - anterior) / anterior) * 100);
+}
 
 function formatarData(iso: string) {
   return new Date(iso).toLocaleString("pt-BR", {
@@ -60,7 +85,7 @@ function DetalhesExtras({ troca }: { troca: Record<string, unknown> | null }) {
 }
 
 export default function Painel() {
-  const [aba, setAba] = useState<"estoque" | "leads" | "banners" | "loja">("estoque");
+  const [aba, setAba] = useState<"estoque" | "leads" | "acessos" | "banners" | "loja">("estoque");
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [banners, setBanners] = useState<Banner[]>([]);
@@ -73,6 +98,11 @@ export default function Painel() {
   const [filtroTipo, setFiltroTipo] = useState("todos");
   const [filtroOrigem, setFiltroOrigem] = useState("todas");
   const [filtroStatus, setFiltroStatus] = useState("todos");
+  const [periodo, setPeriodo] = useState(30);
+  const [visitas, setVisitas] = useState<Visita[]>([]);
+  const [leadsDoPeriodo, setLeadsDoPeriodo] = useState(0);
+  const [carregandoAcessos, setCarregandoAcessos] = useState(false);
+  const [visitasCortadas, setVisitasCortadas] = useState(false);
   const router = useRouter();
 
   const origensDosLeads = useMemo(
@@ -112,6 +142,76 @@ export default function Painel() {
   }, [router]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  // Busca o dobro do período para poder comparar com o intervalo anterior.
+  // Só roda quando a aba está aberta — não atrasa o resto do painel.
+  const carregarAcessos = useCallback(async () => {
+    if (!lojaId) return;
+    setCarregandoAcessos(true);
+    const dia = 86400000;
+    const desde = new Date(Date.now() - periodo * 2 * dia).toISOString();
+    const inicioAtual = new Date(Date.now() - periodo * dia).toISOString();
+
+    const [v, l] = await Promise.all([
+      supabase.from("visitas").select("visitante, caminho, origem, criado_em")
+        .eq("loja_id", lojaId).gte("criado_em", desde)
+        .order("criado_em", { ascending: false }).limit(LIMITE_VISITAS),
+      supabase.from("leads").select("*", { count: "exact", head: true })
+        .eq("loja_id", lojaId).gte("criado_em", inicioAtual),
+    ]);
+
+    // Se bateu no teto da consulta, o período anterior veio pela metade e a
+    // comparação mentiria — melhor escondê-la do que mostrar alta falsa.
+    const linhas = (v.data ?? []) as Visita[];
+    setVisitasCortadas(linhas.length >= LIMITE_VISITAS);
+    setVisitas(linhas);
+    setLeadsDoPeriodo(l.count ?? 0);
+    setCarregandoAcessos(false);
+  }, [lojaId, periodo]);
+
+  useEffect(() => { if (aba === "acessos") carregarAcessos(); }, [aba, carregarAcessos]);
+
+  const acessos = useMemo(() => {
+    const inicioAtual = Date.now() - periodo * 86400000;
+    const atual: Visita[] = [];
+    const anterior: Visita[] = [];
+    visitas.forEach((v) => {
+      (new Date(v.criado_em).getTime() >= inicioAtual ? atual : anterior).push(v);
+    });
+
+    const contaVisitantes = (lista: Visita[]) => new Set(lista.map((v) => v.visitante)).size;
+
+    const porCarro = new Map<string, number>();
+    atual.forEach((v) => {
+      const achado = v.caminho.match(/^\/veiculo\/(.+)$/);
+      if (achado) porCarro.set(achado[1], (porCarro.get(achado[1]) ?? 0) + 1);
+    });
+    const carros = Array.from(porCarro.entries())
+      .map(([slug, total]) => ({ slug, total, veiculo: veiculos.find((x) => x.slug === slug) ?? null }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 10);
+
+    const porCanal = new Map<string, number>();
+    atual.forEach((v) => {
+      const canal = v.origem || "direto";
+      porCanal.set(canal, (porCanal.get(canal) ?? 0) + 1);
+    });
+    const canais = Array.from(porCanal.entries())
+      .map(([nome, total]) => ({ nome, total }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 8);
+
+    const visitantes = contaVisitantes(atual);
+    return {
+      visitas: atual.length,
+      visitasAntes: anterior.length,
+      visitantes,
+      visitantesAntes: contaVisitantes(anterior),
+      conversao: visitantes ? (leadsDoPeriodo / visitantes) * 100 : 0,
+      carros,
+      canais,
+    };
+  }, [visitas, periodo, veiculos, leadsDoPeriodo]);
 
   async function alternarPublicacao(v: Veiculo) {
     await supabase.from("veiculos").update({ publicado: !(v as any).publicado }).eq("id", v.id);
@@ -175,6 +275,7 @@ export default function Painel() {
         {([
           ["estoque", "Estoque", Package],
           ["leads", "Leads", Users],
+          ["acessos", "Acessos", BarChart3],
           ["banners", "Banners", ImageIcon],
           ["loja", "Loja", Store],
         ] as const).map(([k, rot, Ic]) => (
@@ -314,6 +415,90 @@ export default function Painel() {
         </>
       )}
 
+      {aba === "acessos" && (
+        <>
+          <div className="mb-5 flex flex-wrap items-center gap-2">
+            {[7, 30, 90].map((d) => (
+              <button key={d} onClick={() => setPeriodo(d)}
+                className={`rounded-[3px] border px-4 py-2 font-mono text-[10px] tracking-[0.1em] ${
+                  periodo === d ? "border-ouro bg-ouro/10 text-ouro" : "border-linha text-inkDim"}`}>
+                {d} DIAS
+              </button>
+            ))}
+            {carregandoAcessos && <span className="text-[12px] text-inkFaint">Carregando...</span>}
+
+            <a href={GA_RELATORIO} target="_blank" rel="noreferrer"
+              className="ml-auto inline-flex items-center gap-2 rounded-[3px] border border-linha px-4 py-2 text-[13px] text-inkDim transition-colors hover:border-ouro hover:text-ouro">
+              Abrir no Google Analytics <ExternalLink size={14} />
+            </a>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <CartaoNumero rotulo="Visitas" valor={acessos.visitas.toLocaleString("pt-BR")}
+              nota="páginas abertas"
+              variacao={visitasCortadas ? null : variacao(acessos.visitas, acessos.visitasAntes)} />
+            <CartaoNumero rotulo="Visitantes" valor={acessos.visitantes.toLocaleString("pt-BR")}
+              nota="pessoas diferentes"
+              variacao={visitasCortadas ? null : variacao(acessos.visitantes, acessos.visitantesAntes)} />
+            <CartaoNumero rotulo="Leads" valor={String(leadsDoPeriodo)} nota="no mesmo período" />
+            <CartaoNumero rotulo="Conversão" valor={`${acessos.conversao.toFixed(1)}%`}
+              nota="dos visitantes viraram lead" />
+          </div>
+
+          <div className="mt-8 grid gap-6 lg:grid-cols-2">
+            <div>
+              <h2 className="mb-3 font-mono text-[11px] tracking-[0.14em] text-inkFaint">CARROS MAIS VISTOS</h2>
+              <div className="grid gap-2">
+                {acessos.carros.map(({ slug, total, veiculo }) => (
+                  <div key={slug} className="flex items-center justify-between gap-4 rounded border border-linha bg-card px-4 py-3">
+                    <span className="text-[14px]">
+                      {veiculo ? `${veiculo.marca} ${veiculo.modelo}` : slug}
+                      {veiculo?.versao && <span className="text-inkDim"> {veiculo.versao}</span>}
+                    </span>
+                    <span className="shrink-0 font-mono text-[12px] text-ouro">{total}</span>
+                  </div>
+                ))}
+                {acessos.carros.length === 0 && (
+                  <p className="rounded border border-dashed border-linha py-8 text-center text-sm text-inkDim">
+                    Nenhuma visita a página de veículo nesse período.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <h2 className="mb-3 font-mono text-[11px] tracking-[0.14em] text-inkFaint">DE ONDE VEM O ACESSO</h2>
+              <div className="grid gap-2">
+                {acessos.canais.map(({ nome, total }) => {
+                  const fatia = acessos.visitas ? Math.round((total / acessos.visitas) * 100) : 0;
+                  return (
+                    <div key={nome} className="rounded border border-linha bg-card px-4 py-3">
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-[14px]">{ROTULOS_CANAL[nome] ?? nome}</span>
+                        <span className="shrink-0 font-mono text-[12px] text-inkDim">{total} · {fatia}%</span>
+                      </div>
+                      <div className="mt-2 h-1 overflow-hidden rounded-full bg-bg2">
+                        <div className="h-full bg-ouro" style={{ width: `${fatia}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+                {acessos.canais.length === 0 && (
+                  <p className="rounded border border-dashed border-linha py-8 text-center text-sm text-inkDim">
+                    Sem acessos registrados nesse período.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <p className="mt-6 text-[12px] leading-relaxed text-inkFaint">
+            A contagem começa na data em que esta atualização entrou no ar — períodos
+            anteriores aparecem vazios. Visitas ao painel não entram na conta.
+          </p>
+        </>
+      )}
+
       {aba === "banners" && (
         <>
           <button onClick={() => setEditandoBanner({})}
@@ -382,3 +567,24 @@ export default function Painel() {
 }
 
 const rotuloLoja = "font-mono text-[9px] uppercase tracking-[0.14em] text-inkFaint";
+
+function CartaoNumero({
+  rotulo, valor, nota, variacao: variou,
+}: { rotulo: string; valor: string; nota: string; variacao?: number | null }) {
+  return (
+    <div className="rounded border border-linha bg-card p-5">
+      <p className={rotuloLoja}>{rotulo}</p>
+      <div className="mt-2 flex items-end gap-2">
+        <span className="font-display text-3xl leading-none">{valor}</span>
+        {variou != null && variou !== 0 && (
+          <span className={`mb-0.5 inline-flex items-center gap-0.5 font-mono text-[11px] ${
+            variou > 0 ? "text-[#8FC7A3]" : "text-[#C25454]"}`}>
+            {variou > 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
+            {Math.abs(variou)}%
+          </span>
+        )}
+      </div>
+      <p className="mt-1.5 text-[12px] text-inkFaint">{nota}</p>
+    </div>
+  );
+}
