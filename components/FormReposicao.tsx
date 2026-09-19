@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Check, Send } from "lucide-react";
 import { criarLead } from "@/lib/supabase";
+import { eventoLead } from "@/lib/rastreio";
 
 const campo = "w-full rounded-[3px] border border-linha bg-bg1 px-3 py-2.5 text-sm text-ink";
 const rotulo = "mb-1.5 block font-mono text-[9px] uppercase tracking-[0.14em] text-inkFaint";
@@ -27,6 +28,10 @@ export default function FormReposicao({ lojaId }: { lojaId: string }) {
           marca: d.marca, modelo: d.modelo, ano: d.ano,
           km: d.km, valor_pretendido: d.valor,
         },
+      });
+      eventoLead({
+        nome: `${d.marca} ${d.modelo}`.trim(),
+        categoria: "avaliacao_veiculo",
       });
       setEstado("ok");
     } catch { setEstado("erro"); }

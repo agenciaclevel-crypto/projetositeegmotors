@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { brl, criarLead, linkWhatsApp, type Loja } from "@/lib/supabase";
+import { eventoLead } from "@/lib/rastreio";
 
 const TAXA_MES = 0.0149; // taxa de vitrine; a real vem da análise do banco
 
@@ -49,6 +50,11 @@ export default function Simulador({
           parcela_estimada: Math.round(parcela),
           preco,
         },
+      });
+      eventoLead({
+        nome: nomeVeiculo,
+        categoria: "financiamento",
+        valor: preco,
       });
       setEstado("ok");
     } catch {

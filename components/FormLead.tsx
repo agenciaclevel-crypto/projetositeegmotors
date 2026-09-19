@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { criarLead } from "@/lib/supabase";
+import { eventoLead } from "@/lib/rastreio";
 
 export default function FormLead({
   lojaId,
@@ -30,6 +31,10 @@ export default function FormLead({
         veiculo_id: veiculoId ?? null,
         mensagem: nomeVeiculo ? `Interesse em ${nomeVeiculo}` : undefined,
         veiculo_troca: troca ? { tem_troca: true } : null,
+      });
+      eventoLead({
+        nome: nomeVeiculo ?? "Contato pelo site",
+        categoria: "interesse_veiculo",
       });
       setEstado("ok");
     } catch {
