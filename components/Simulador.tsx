@@ -4,7 +4,7 @@ import { useState } from "react";
 import { brl, criarLead, linkWhatsApp, type Loja } from "@/lib/supabase";
 import { eventoLead } from "@/lib/rastreio";
 
-const TAXA_MES = 0.0149; // taxa de vitrine; a real vem da análise do banco
+const TAXA_MES = 0.019; // taxa de vitrine; a real vem da análise do banco
 
 export default function Simulador({
   preco,
@@ -82,7 +82,7 @@ export default function Simulador({
       </label>
 
       <div className="mt-4 flex gap-2">
-        {[24, 36, 48, 60].map((p) => (
+        {[24, 36, 48].map((p) => (
           <button
             key={p}
             onClick={() => setPrazo(p)}
