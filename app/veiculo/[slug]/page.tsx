@@ -5,7 +5,6 @@ import {
   getLoja, getVeiculo, getVeiculos, brl, formatKm, capaDe, linkWhatsApp,
 } from "@/lib/supabase";
 import { enderecoEstruturado, enderecoCompleto, siteUrl } from "@/lib/seo";
-import FormLead from "@/components/FormLead";
 import Simulador from "@/components/Simulador";
 import GaleriaVeiculo from "@/components/GaleriaVeiculo";
 
@@ -215,9 +214,10 @@ export default async function PaginaVeiculo({
             )}
             <div className="font-display text-4xl text-[#C7A25C]">{brl(v.preco)}</div>
 
+            {/* Um formulário só na página do carro: o do simulador. O segundo
+                (interesse) pedia os mesmos dados logo abaixo e dividia a
+                atenção de quem ia converter. */}
             <Simulador preco={v.preco} loja={loja} veiculoId={v.id} nomeVeiculo={nome} />
-
-            <FormLead lojaId={loja.id} veiculoId={v.id} nomeVeiculo={nome} />
 
             <a
               href={linkWhatsApp(loja, `Olá! Tenho interesse no ${nome} ${v.ano_modelo} que vi no site.`)}
