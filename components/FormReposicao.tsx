@@ -21,7 +21,7 @@ export default function FormReposicao({ lojaId }: { lojaId: string }) {
     setEstado("enviando");
     try {
       await criarLead({
-        loja_id: lojaId, tipo: "reposicao", origem: "site",
+        loja_id: lojaId, tipo: "reposicao", origem: "venda",
         nome: d.nome.trim(), telefone: d.fone.trim(),
         mensagem: d.mensagem || undefined,
         veiculo_troca: {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { brl, criarLead, linkWhatsApp, type Loja } from "@/lib/supabase";
+import { brl, criarLead, type Loja } from "@/lib/supabase";
 import { eventoLead } from "@/lib/rastreio";
 
 const TAXA_MES = 0.019; // taxa de vitrine; a real vem da análise do banco
@@ -82,7 +82,7 @@ export default function Simulador({
       </label>
 
       <div className="mt-4 flex gap-2">
-        {[24, 36, 48].map((p) => (
+        {[24, 36, 48, 60].map((p) => (
           <button
             key={p}
             onClick={() => setPrazo(p)}
@@ -112,16 +112,12 @@ export default function Simulador({
           <p className="text-[13px] font-semibold text-[#F3F0E9]">
             Recebemos sua simulação, {nome.split(" ")[0]}.
           </p>
+          {/* Sem botão de WhatsApp aqui: a simulação já virou lead no painel.
+              Se a pessoa também chamasse no WhatsApp, o mesmo contato entraria
+              duas vezes pra equipe atender. */}
           <p className="mt-1.5 text-xs leading-relaxed text-[#A6A9B2]">
             Um consultor confirma as condições com o banco e te chama no WhatsApp.
           </p>
-          <a
-            href={linkWhatsApp(loja, `Olá! Simulei o financiamento do ${nomeVeiculo}: entrada ${brl(entrada)}, ${prazo}x de ${brl(parcela)}.`)}
-            target="_blank" rel="noreferrer"
-            className="mt-3 inline-block rounded bg-[#1E8E4A] px-4 py-2 text-xs font-semibold text-white"
-          >
-            Chamar no WhatsApp agora
-          </a>
         </div>
       ) : (
         <div className="mt-5 border-t border-[#2C303A] pt-4">
