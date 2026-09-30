@@ -19,8 +19,17 @@ const ROTULOS_STATUS: Record<string, string> = {
 };
 
 const ROTULOS_ORIGEM: Record<string, string> = {
-  site: "Site", agenciamento: "Agenciamento", financiamento: "Financiamento",
+  venda: "Venda seu carro", agenciamento: "Agenciamento",
+  financiamento: "Financiamento", site: "Site",
 };
+
+/** Os leads de avaliação antigos foram gravados com origem "site", que não diz
+ * de onde vieram. Como todo lead de reposição nasce na página "Venda seu
+ * carro", a etiqueta é corrigida na leitura — sem precisar mexer no banco. */
+function rotuloOrigem(l: Lead) {
+  if (l.origem === "site" && l.tipo === "reposicao") return "Venda seu carro";
+  return ROTULOS_ORIGEM[l.origem] ?? l.origem;
+}
 
 type Visita = {
   visitante: string; caminho: string; origem: string | null; criado_em: string;
@@ -375,7 +384,7 @@ export default function Painel() {
                         {l.tipo === "reposicao" ? "REPOSIÇÃO" : "COMPRA"}
                       </span>
                       <span className="rounded-sm border border-linha bg-bg2 px-2 py-1 font-mono text-[9px] tracking-[0.1em] text-inkDim">
-                        {(ROTULOS_ORIGEM[l.origem] ?? l.origem).toUpperCase()}
+                        {rotuloOrigem(l).toUpperCase()}
                       </span>
                       <select value={l.status} onChange={(e) => atualizarStatusLead(l.id, e.target.value)}
                         className="rounded-sm border border-linha bg-bg2 px-2 py-1.5 font-mono text-[9px] tracking-[0.1em] text-inkDim">
