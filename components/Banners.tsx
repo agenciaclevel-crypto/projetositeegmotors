@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { MessageCircle } from "lucide-react";
 import type { Banner, Loja } from "@/lib/supabase";
-import { linkWhatsApp } from "@/lib/supabase";
+import { linkWhatsApp, criarLead } from "@/lib/supabase";
+import { eventoLead } from "@/lib/rastreio";
 
 export default function Banners({ banners, loja }: { banners: Banner[]; loja: Loja }) {
   const [i, setI] = useState(0);
@@ -17,6 +18,21 @@ export default function Banners({ banners, loja }: { banners: Banner[]; loja: Lo
 
   if (!banners.length) return null;
   const b = banners[i % banners.length];
+
+  /** Registra no painel que alguém foi pro WhatsApp por causa da campanha.
+   * Não espera a resposta do banco: o link abre o WhatsApp na hora, e o
+   * registro termina em segundo plano. Se falhar, o cliente nem percebe —
+   * conversa perdida é pior que lead não registrado. */
+  function registrarCliqueNoBanner() {
+    criarLead({
+      loja_id: loja.id,
+      nome: "Clique no WhatsApp",
+      telefone: "",
+      origem: "banner",
+      mensagem: `Clicou no WhatsApp pelo banner "${b.titulo ?? "sem título"}".`,
+    }).catch(() => {});
+    eventoLead({ nome: b.titulo ?? "Banner", categoria: "banner" });
+  }
 
   return (
     <section className="border-b border-linha bg-bg1">
@@ -37,6 +53,7 @@ export default function Banners({ banners, loja }: { banners: Banner[]; loja: Lo
 
             <a href={linkWhatsApp(loja, b.link || `Olá! Vi a campanha "${b.titulo}" no site.`)}
               target="_blank" rel="noreferrer"
+              onClick={registrarCliqueNoBanner}
               className="mt-7 inline-flex w-fit items-center gap-2 rounded-[3px] bg-zap px-6 py-3.5 text-[15px] font-semibold text-white">
               <MessageCircle size={17} /> Falar no WhatsApp
             </a>
