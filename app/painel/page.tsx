@@ -20,8 +20,12 @@ const ROTULOS_STATUS: Record<string, string> = {
 
 const ROTULOS_ORIGEM: Record<string, string> = {
   venda: "Venda seu carro", agenciamento: "Agenciamento",
-  financiamento: "Financiamento", site: "Site",
+  financiamento: "Financiamento", banner: "Banner", site: "Site",
 };
+
+/** Clique no WhatsApp pelo banner entra sem telefone: é registro de origem,
+ * não contato para retornar. Serve para separar um do outro na tela. */
+const temTelefone = (l: Lead) => l.telefone.replace(/\D/g, "").length >= 10;
 
 /** Os leads de avaliação antigos foram gravados com origem "site", que não diz
  * de onde vieram. Como todo lead de reposição nasce na página "Venda seu
@@ -375,7 +379,9 @@ export default function Painel() {
                     <div>
                       <p className="text-[15px] font-semibold">{l.nome}</p>
                       <p className="mt-1 font-mono text-[11px] text-inkFaint">
-                        {formatarData(l.criado_em)} · {l.telefone}{l.email ? ` · ${l.email}` : ""}
+                        {formatarData(l.criado_em)}
+                        {temTelefone(l) ? ` · ${l.telefone}` : ""}
+                        {l.email ? ` · ${l.email}` : ""}
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -408,10 +414,16 @@ export default function Painel() {
                     </div>
                   )}
 
-                  <a href={`https://wa.me/55${l.telefone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer"
-                    className="mt-3 inline-flex rounded-[3px] bg-zap px-3 py-2 text-xs font-semibold text-white">
-                    Responder no WhatsApp
-                  </a>
+                  {temTelefone(l) ? (
+                    <a href={`https://wa.me/55${l.telefone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer"
+                      className="mt-3 inline-flex rounded-[3px] bg-zap px-3 py-2 text-xs font-semibold text-white">
+                      Responder no WhatsApp
+                    </a>
+                  ) : (
+                    <p className="mt-3 text-[12px] text-inkFaint">
+                      Registro de origem — a pessoa foi direto para o WhatsApp, sem deixar contato.
+                    </p>
+                  )}
                 </div>
               );
             })}
