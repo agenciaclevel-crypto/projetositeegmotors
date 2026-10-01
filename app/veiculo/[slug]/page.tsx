@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import {
-  getLoja, getVeiculo, getVeiculos, brl, formatKm, capaDe, linkWhatsApp,
+  getLoja, getVeiculo, getVeiculos, brl, formatKm, capaDe,
 } from "@/lib/supabase";
 import { enderecoEstruturado, enderecoCompleto, siteUrl } from "@/lib/seo";
 import Simulador from "@/components/Simulador";
@@ -219,12 +219,9 @@ export default async function PaginaVeiculo({
                 atenção de quem ia converter. */}
             <Simulador preco={v.preco} loja={loja} veiculoId={v.id} nomeVeiculo={nome} />
 
-            <a
-              href={linkWhatsApp(loja, `Olá! Tenho interesse no ${nome} ${v.ano_modelo} que vi no site.`)}
-              className="mt-3 block rounded bg-[#1E8E4A] py-3 text-center text-sm font-semibold text-white"
-            >
-              Chamar no WhatsApp
-            </a>
+            {/* Sem botão de WhatsApp colado no formulário: o contato passa
+                pelo formulário, que registra o lead no painel. Quem prefere o
+                WhatsApp direto continua com o botão do topo e o flutuante. */}
 
             <p className="mt-3 text-center text-[12px] leading-relaxed text-[#6E7280]">
               Para ver de perto: {loja.nome}, {enderecoCompleto(loja)}.
