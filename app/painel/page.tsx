@@ -43,6 +43,9 @@ type Visita = {
  * loja; se um dia encostar nele, o painel esconde a comparação. */
 const LIMITE_VISITAS = 20000;
 
+/** Leads vêm em páginas: a loja com histórico grande não espera tudo carregar. */
+const LEADS_POR_PAGINA = 50;
+
 /** Nomes bonitos para a lista de "de onde vem o acesso". O que não estiver
  * aqui aparece com o próprio endereço do site de origem. */
 const ROTULOS_CANAL: Record<string, string> = {
@@ -116,6 +119,9 @@ export default function Painel() {
   const [leadsDoPeriodo, setLeadsDoPeriodo] = useState(0);
   const [carregandoAcessos, setCarregandoAcessos] = useState(false);
   const [visitasCortadas, setVisitasCortadas] = useState(false);
+  const [temMaisLeads, setTemMaisLeads] = useState(false);
+  const [carregandoMaisLeads, setCarregandoMaisLeads] = useState(false);
+  const [erroPainel, setErroPainel] = useState("");
   const router = useRouter();
 
   const origensDosLeads = useMemo(
@@ -142,13 +148,19 @@ export default function Painel() {
         .select("*, veiculo_fotos(id,url,url_thumb,ordem,capa)")
         .eq("loja_id", perfil.loja_id).order("criado_em", { ascending: false }),
       supabase.from("leads").select("*")
-        .eq("loja_id", perfil.loja_id).order("criado_em", { ascending: false }).limit(50),
+        .eq("loja_id", perfil.loja_id).order("criado_em", { ascending: false })
+        .range(0, LEADS_POR_PAGINA - 1),
       supabase.from("banners").select("*")
         .eq("loja_id", perfil.loja_id).order("ordem", { ascending: true }),
       supabase.from("lojas").select("*").eq("id", perfil.loja_id).single(),
     ]);
+    // Sem isso, uma falha de rede ou de permissão aparece como "loja vazia".
+    const falha = [v, l, b, lj].find((r) => r.error)?.error;
+    setErroPainel(falha ? `Parte dos dados não carregou: ${falha.message}` : "");
+
     setVeiculos((v.data ?? []) as unknown as Veiculo[]);
     setLeads((l.data ?? []) as Lead[]);
+    setTemMaisLeads((l.data?.length ?? 0) === LEADS_POR_PAGINA);
     setBanners((b.data ?? []) as Banner[]);
     setLoja((lj.data ?? null) as Loja | null);
     setCarregando(false);
@@ -226,33 +238,66 @@ export default function Painel() {
     };
   }, [visitas, periodo, veiculos, leadsDoPeriodo]);
 
-  async function alternarPublicacao(v: Veiculo) {
-    await supabase.from("veiculos").update({ publicado: !(v as any).publicado }).eq("id", v.id);
+  async function carregarMaisLeads() {
+    if (!lojaId) return;
+    setCarregandoMaisLeads(true);
+    const { data, error } = await supabase.from("leads").select("*")
+      .eq("loja_id", lojaId).order("criado_em", { ascending: false })
+      .range(leads.length, leads.length + LEADS_POR_PAGINA - 1);
+    setCarregandoMaisLeads(false);
+    if (error) { alert(`Falha ao carregar mais leads: ${error.message}`); return; }
+    setLeads((atual) => [...atual, ...((data ?? []) as Lead[])]);
+    setTemMaisLeads((data?.length ?? 0) === LEADS_POR_PAGINA);
+  }
+
+  /** O RLS não devolve erro quando bloqueia um UPDATE ou DELETE: só não mexe
+   * em nenhuma linha. Por isso a contagem também é conferida, senão o botão
+   * "funciona" e nada muda — caso do vendedor tentando excluir. */
+  async function conferir(
+    acao: PromiseLike<{ error: { message: string } | null; count: number | null }>,
+    falha: string,
+  ) {
+    const { error, count } = await acao;
+    if (error) alert(`${falha}: ${error.message}`);
+    else if (count === 0) alert(`${falha}: seu usuário não tem permissão para isso.`);
     carregar();
+  }
+
+  async function alternarPublicacao(v: Veiculo) {
+    await conferir(
+      supabase.from("veiculos").update({ publicado: !(v as any).publicado }, { count: "exact" }).eq("id", v.id),
+      "Falha ao mudar a publicação",
+    );
   }
 
   async function excluir(id: string) {
     if (!confirm("Excluir este veículo? A ação não pode ser desfeita.")) return;
-    await supabase.from("veiculos").delete().eq("id", id);
-    carregar();
+    await conferir(
+      supabase.from("veiculos").delete({ count: "exact" }).eq("id", id),
+      "Falha ao excluir o veículo",
+    );
   }
 
   async function alternarBannerAtivo(b: Banner) {
-    await supabase.from("banners").update({ ativo: !b.ativo }).eq("id", b.id);
-    carregar();
+    await conferir(
+      supabase.from("banners").update({ ativo: !b.ativo }, { count: "exact" }).eq("id", b.id),
+      "Falha ao mudar o banner",
+    );
   }
 
   async function excluirBanner(id: string) {
     if (!confirm("Excluir este banner? A ação não pode ser desfeita.")) return;
-    await supabase.from("banners").delete().eq("id", id);
-    carregar();
+    await conferir(
+      supabase.from("banners").delete({ count: "exact" }).eq("id", id),
+      "Falha ao excluir o banner",
+    );
   }
 
   async function enviarLogo(arquivo: File) {
     if (!lojaId) return;
     const { prepararFoto } = await import("@/lib/imagem");
     const pronta = await prepararFoto(arquivo);
-    const nome = `logo/${lojaId}-${Date.now()}.webp`;
+    const nome = `${lojaId}/logo-${Date.now()}.webp`;
     const { error: erroUpload } = await supabase.storage
       .from("marca").upload(nome, pronta.grande, { upsert: true, contentType: "image/webp", cacheControl: "31536000" });
     if (erroUpload) { alert(`Falha ao enviar a logo: ${erroUpload.message}`); return; }
@@ -283,6 +328,12 @@ export default function Painel() {
           <LogOut size={15} /> Sair
         </button>
       </div>
+
+      {erroPainel && (
+        <p className="mb-5 rounded border border-[#C25454]/45 bg-[#C25454]/10 px-4 py-3 text-sm text-[#E08A8A]">
+          {erroPainel}
+        </p>
+      )}
 
       <div className="mb-7 flex flex-wrap gap-2">
         {([
@@ -433,6 +484,13 @@ export default function Painel() {
               </p>
             )}
           </div>
+
+          {temMaisLeads && (
+            <button onClick={carregarMaisLeads} disabled={carregandoMaisLeads}
+              className="mt-4 w-full rounded-[3px] border border-linha py-3 text-sm text-inkDim disabled:opacity-45">
+              {carregandoMaisLeads ? "Carregando..." : "Carregar leads mais antigos"}
+            </button>
+          )}
         </>
       )}
 

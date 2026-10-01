@@ -38,7 +38,7 @@ export default function FormBanner({
 
     if (arquivo) {
       const pronta = await prepararFoto(arquivo);
-      const nome = `banners/${Date.now()}.webp`;
+      const nome = `${lojaId}/banners/${Date.now()}.webp`;
       const { error: erroUpload } = await supabase.storage
         .from("marca")
         .upload(nome, pronta.grande, { upsert: true, contentType: "image/webp", cacheControl: "31536000" });
