@@ -90,7 +90,14 @@ export default function FormVeiculo({
   const set = (k: string, num = false) => (e: any) =>
     setV({ ...v, [k]: num ? Number(e.target.value) : e.target.value });
 
-  const valido = v.marca?.trim() && v.modelo?.trim() && v.preco > 0;
+  // O que ainda falta para poder salvar. Botão travado sem explicação é o
+  // tipo de coisa que faz a pessoa achar que o sistema quebrou.
+  const faltando = [
+    !v.marca?.trim() ? "marca" : null,
+    !v.modelo?.trim() ? "modelo" : null,
+    !(Number(v.preco) > 0) ? "preço" : null,
+  ].filter(Boolean) as string[];
+  const valido = faltando.length === 0;
 
   /** O endereço do carro no site (slug) é único por loja. Se a loja tem dois
    * carros iguais no pátio — mesmo modelo, versão e ano — o segundo precisa de
@@ -107,7 +114,10 @@ export default function FormVeiculo({
   }
 
   async function salvar() {
-    if (!valido) return;
+    if (!valido) {
+      setErro(`Falta preencher: ${faltando.join(", ")}.`);
+      return;
+    }
     setSalvando(true); setErro("");
 
     const base = v.slug || gerarSlug(`${v.marca} ${v.modelo} ${v.versao ?? ""} ${v.ano_modelo}`);
@@ -233,7 +243,8 @@ export default function FormVeiculo({
             <input type="number" value={v.preco_de ?? ""} className={campo}
               onChange={(e) => setV({ ...v, preco_de: e.target.value ? Number(e.target.value) : null })} /></label>
           <label><span className={rotulo}>Preço por (R$)</span>
-            <input type="number" value={v.preco} onChange={set("preco", true)} className={campo} /></label>
+            <input type="number" value={v.preco || ""} className={campo} placeholder="164900"
+              onChange={(e) => setV({ ...v, preco: Number(e.target.value) || 0 })} /></label>
           <label><span className={rotulo}>Combustível</span>
             <select value={v.combustivel} onChange={set("combustivel")} className={campo}>
               <option>Flex</option><option>Gasolina</option><option>Diesel</option><option>Híbrido</option><option>Elétrico</option>
@@ -356,9 +367,14 @@ export default function FormVeiculo({
           {erro && <p className="text-xs text-[#C25454] sm:col-span-2">{erro}</p>}
         </div>
 
-        <div className="flex justify-end gap-3 px-6 pb-6">
+        <div className="flex flex-wrap items-center justify-end gap-3 px-6 pb-6">
+          {!valido && !salvando && (
+            <p className="mr-auto text-[12px] text-ouro">
+              Falta preencher: {faltando.join(", ")}.
+            </p>
+          )}
           <button onClick={fechar} className="rounded-[3px] border border-linha px-5 py-3 text-sm font-semibold">Cancelar</button>
-          <button onClick={salvar} disabled={!valido || salvando}
+          <button onClick={salvar} disabled={salvando}
             className="rounded-[3px] bg-ouro px-5 py-3 text-sm font-semibold text-bg0 disabled:opacity-45">
             {salvando ? (progresso || "Salvando...") : v.id ? "Salvar alterações" : "Cadastrar veículo"}
           </button>
