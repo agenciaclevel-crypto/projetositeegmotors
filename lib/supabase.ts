@@ -87,7 +87,7 @@ const CAMPOS_VEICULO = `
 /*  Queries                                                          */
 /* ---------------------------------------------------------------- */
 
-// O slug da loja vem do domínio, no middleware. Em dev, cai no .env.
+// O slug da loja vem do .env: cada loja tem o próprio deploy.
 export async function getLoja(slug = process.env.NEXT_PUBLIC_LOJA_SLUG!) {
   const { data, error } = await supabase
     .from("lojas")

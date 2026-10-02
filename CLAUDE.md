@@ -13,6 +13,12 @@ que pretende replicar a mesma base para outras lojas parceiras.
 
 - **Multi-tenant:** toda tabela tem `loja_id`. Nunca escreva query sem filtrar
   por loja. O isolamento real é feito pelo RLS no Supabase.
+- **Um deploy por loja:** a loja vem de `NEXT_PUBLIC_LOJA_SLUG`. Ainda não
+  existe middleware que escolha a loja pelo domínio.
+- **Storage:** todo arquivo sobe dentro da pasta da loja (`<loja_id>/...`).
+  As policies de `migracao-seguranca.sql` recusam upload fora dela.
+- **Papéis:** `gestor` faz tudo; `vendedor` não exclui carro nem mexe em
+  banner ou logo. A trava está no RLS, não só na tela.
 - **Nunca** use a chave `service_role` em variável `NEXT_PUBLIC_`. O site
   público usa apenas a chave `anon`, protegida pelas policies.
 - **Nunca** commite `.env.local`.

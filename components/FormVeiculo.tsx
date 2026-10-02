@@ -170,7 +170,8 @@ export default function FormVeiculo({
     for (let i = 0; i < fotos.length; i++) {
       const f = fotos[i];
       setProgresso(`Enviando foto ${i + 1} de ${fotos.length}...`);
-      const nome = `${slug}/${carimbo}-${String(i).padStart(2, "0")}`;
+      // A pasta da loja vem primeiro: é por ela que o Storage decide quem grava.
+      const nome = `${lojaId}/${slug}/${carimbo}-${String(i).padStart(2, "0")}`;
 
       const [g, t] = await Promise.all([
         supabase.storage.from("veiculos").upload(`${nome}.webp`, f.grande,
