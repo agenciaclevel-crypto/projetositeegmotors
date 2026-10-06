@@ -1,20 +1,26 @@
 /**
- * Converte a foto para WebP no próprio celular, antes de subir.
+ * Converte a foto para formato leve no próprio celular, antes de subir.
  *
- * Por que no navegador e não no servidor: a foto do iPhone tem 3 a 5 MB.
- * Convertendo antes, sobem ~200 KB. Numa sessão de 10 carros com 8 fotos
- * cada, é a diferença entre 300 MB e 16 MB de upload — e no 4G do pátio
- * isso é o que faz o cadastro terminar ou travar no meio.
+ * Importante: nem todo navegador sabe GERAR WebP. O Safari do iPhone exibe
+ * WebP há anos, mas em várias versões o canvas.toBlob("image/webp") ignora o
+ * pedido e devolve PNG silenciosamente — e PNG de foto fica MAIOR que o
+ * original. Por isso aqui a gente confere o tipo do que saiu e cai para JPEG
+ * quando o WebP não existe. JPEG funciona em qualquer aparelho e fica, na
+ * prática, só uns 15% maior que o WebP.
  */
 
 export type FotoPronta = {
-  grande: Blob;   // lado maior 1600px — galeria
-  thumb: Blob;    // 720x480 recortado — card da vitrine
+  grande: Blob;
+  thumb: Blob;
+  tipo: string;   // "image/webp" ou "image/jpeg"
+  ext: string;    // "webp" ou "jpg"
   largura: number;
   altura: number;
   original: string;
-  ganho: number;  // quanto encolheu, em %
+  ganho: number;  // % de redução; nunca negativo
 };
+
+export type ErroFoto = { arquivo: string; motivo: string };
 
 const LADO_MAIOR = 1600;
 const THUMB = { w: 720, h: 480 };
@@ -24,9 +30,7 @@ function desenhar(bmp: ImageBitmap, w: number, h: number, recorte = false) {
   cv.width = w; cv.height = h;
   const ctx = cv.getContext("2d")!;
   ctx.imageSmoothingQuality = "high";
-
   if (recorte) {
-    // cover: preenche o quadro sem distorcer, cortando o excesso
     const escala = Math.max(w / bmp.width, h / bmp.height);
     const lw = bmp.width * escala, lh = bmp.height * escala;
     ctx.drawImage(bmp, (w - lw) / 2, (h - lh) / 2, lw, lh);
@@ -36,53 +40,68 @@ function desenhar(bmp: ImageBitmap, w: number, h: number, recorte = false) {
   return cv;
 }
 
-const paraBlob = (cv: HTMLCanvasElement, q: number) =>
-  new Promise<Blob>((ok, falha) =>
-    cv.toBlob((b) => (b ? ok(b) : falha(new Error("Falha ao converter"))), "image/webp", q));
+const toBlob = (cv: HTMLCanvasElement, tipo: string, q: number) =>
+  new Promise<Blob | null>((ok) => cv.toBlob((b) => ok(b), tipo, q));
 
-export function suportaWebp() {
-  const cv = document.createElement("canvas");
-  return cv.toDataURL("image/webp").startsWith("data:image/webp");
+/** Tenta WebP; se o navegador devolver outra coisa, refaz em JPEG. */
+async function comprimir(cv: HTMLCanvasElement, qWebp: number, qJpeg: number) {
+  const webp = await toBlob(cv, "image/webp", qWebp);
+  if (webp && webp.type === "image/webp") return webp;
+
+  const jpeg = await toBlob(cv, "image/jpeg", qJpeg);
+  if (jpeg && jpeg.type === "image/jpeg") return jpeg;
+
+  throw new Error("Este navegador não conseguiu comprimir a imagem.");
 }
 
 export async function prepararFoto(arquivo: File): Promise<FotoPronta> {
-  // imageOrientation resolve a foto deitada do celular (EXIF)
-  const bmp = await createImageBitmap(arquivo, { imageOrientation: "from-image" });
+  let bmp: ImageBitmap;
+  try {
+    bmp = await createImageBitmap(arquivo, { imageOrientation: "from-image" });
+  } catch {
+    bmp = await createImageBitmap(arquivo); // navegador antigo
+  }
 
   const escala = Math.min(1, LADO_MAIOR / Math.max(bmp.width, bmp.height));
   const w = Math.round(bmp.width * escala);
   const h = Math.round(bmp.height * escala);
 
-  const grande = await paraBlob(desenhar(bmp, w, h), 0.82);
-  const thumb = await paraBlob(desenhar(bmp, THUMB.w, THUMB.h, true), 0.78);
+  const grande = await comprimir(desenhar(bmp, w, h), 0.82, 0.84);
+  const thumb = await comprimir(desenhar(bmp, THUMB.w, THUMB.h, true), 0.78, 0.8);
   bmp.close();
 
+  const tipo = grande.type;
   return {
-    grande, thumb, largura: w, altura: h,
+    grande, thumb, tipo,
+    ext: tipo === "image/webp" ? "webp" : "jpg",
+    largura: w, altura: h,
     original: arquivo.name,
-    ganho: Math.round((1 - grande.size / arquivo.size) * 100),
+    ganho: Math.max(0, Math.round((1 - grande.size / arquivo.size) * 100)),
   };
 }
 
-/** Processa várias fotos em sequência, avisando o progresso. */
 export async function prepararFotos(
   arquivos: File[],
   aoAndar?: (feitas: number, total: number) => void
-) {
+): Promise<{ prontas: FotoPronta[]; erros: ErroFoto[] }> {
   const prontas: FotoPronta[] = [];
+  const erros: ErroFoto[] = [];
+
   for (let i = 0; i < arquivos.length; i++) {
+    const f = arquivos[i];
     try {
-      prontas.push(await prepararFoto(arquivos[i]));
-    } catch {
-      // HEIC que o navegador não decodifica cai aqui: sobe o original
-      const f = arquivos[i];
-      prontas.push({
-        grande: f, thumb: f, largura: 0, altura: 0, original: f.name, ganho: 0,
+      prontas.push(await prepararFoto(f));
+    } catch (e) {
+      erros.push({
+        arquivo: f.name,
+        motivo: /heic|heif/i.test(f.name)
+          ? "formato HEIC do iPhone — em Ajustes → Câmera → Formatos, escolha Mais Compatível"
+          : (e as Error).message,
       });
     }
     aoAndar?.(i + 1, arquivos.length);
   }
-  return prontas;
+  return { prontas, erros };
 }
 
 export const kb = (b: number) =>
