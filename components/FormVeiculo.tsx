@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { X, Upload, Camera, ImagePlus, Trash2 } from "lucide-react";
+import { X } from "lucide-react";
 import { supabase, type Veiculo } from "@/lib/supabase";
-import { prepararFotos, kb, type FotoPronta, type ErroFoto } from "@/lib/imagem";
+import { prepararFotos, type ErroFoto } from "@/lib/imagem";
+import GestorFotos, { type ItemFoto } from "./GestorFotos";
 
 const campo = "w-full rounded-[3px] border border-linha bg-bg1 px-3 py-2.5 text-sm text-ink";
 const rotulo = "mb-1.5 block font-mono text-[9px] uppercase tracking-[0.14em] text-inkFaint";
@@ -21,10 +22,23 @@ export default function FormVeiculo({
     portas: 4, condicao: "seminovo", preco: 0, preco_de: null, opcionais: [],
     observacoes: "", publicado: true, destaque: false, ...veiculo,
   });
-  const [fotos, setFotos] = useState<FotoPronta[]>([]);
-  const [previas, setPrevias] = useState<string[]>([]);
+  // começa com as fotos que já estão no banco, na ordem salva
+  const [itens, setItens] = useState<ItemFoto[]>(() =>
+    [...((veiculo as any)?.veiculo_fotos ?? [])]
+      .sort((a: any, b: any) => a.ordem - b.ordem)
+      .map((f: any) => ({
+        chave: f.id ?? f.url,
+        id: f.id,
+        url: f.url,
+        urlThumb: f.url_thumb,
+        nova: false,
+      })));
+
+  const [removidas, setRemovidas] = useState<{ id: string; url: string; urlThumb?: string | null }[]>([]);
   const [falhas, setFalhas] = useState<ErroFoto[]>([]);
   const [processando, setProcessando] = useState("");
+  const [ultimoFormato, setUltimoFormato] = useState("JPEG");
+  const [ultimoGanho, setUltimoGanho] = useState(0);
   const [salvando, setSalvando] = useState(false);
   const [progresso, setProgresso] = useState("");
   const [erro, setErro] = useState("");
@@ -36,22 +50,51 @@ export default function FormVeiculo({
     setProcessando(`Preparando 0 de ${arquivos.length}...`);
     const { prontas, erros } = await prepararFotos(arquivos, (f, t) =>
       setProcessando(`Preparando ${f} de ${t}...`));
-    setFotos((atual) => [...atual, ...prontas]);
-    setPrevias((atual) => [...atual, ...prontas.map((f) => URL.createObjectURL(f.thumb))]);
+
+    setItens((atual) => [
+      ...atual,
+      ...prontas.map((f, i) => ({
+        chave: `nova-${Date.now()}-${i}`,
+        url: URL.createObjectURL(f.thumb),
+        urlThumb: null,
+        nova: true,
+        blobGrande: f.grande,
+        blobThumb: f.thumb,
+        ext: f.ext,
+        tipo: f.tipo,
+      })),
+    ]);
+
+    if (prontas.length) {
+      setUltimoFormato(prontas[0].ext === "webp" ? "WebP" : "JPEG");
+      setUltimoGanho(Math.round(prontas.reduce((a, f) => a + f.ganho, 0) / prontas.length));
+    }
     setFalhas(erros);
     setProcessando("");
   }
 
-  function removerFoto(i: number) {
-    URL.revokeObjectURL(previas[i]);
-    setFotos((f) => f.filter((_, j) => j !== i));
-    setPrevias((p) => p.filter((_, j) => j !== i));
+  // guarda as removidas que já existiam, para apagar do banco e do Storage
+  function atualizarItens(f: (atual: ItemFoto[]) => ItemFoto[]) {
+    setItens((atual) => {
+      const novo = f(atual);
+      const sumiram = atual.filter(
+        (x) => !x.nova && x.id && !novo.some((y) => y.chave === x.chave));
+      if (sumiram.length) {
+        setRemovidas((r) => [...r, ...sumiram.map((x) => ({
+          id: x.id!, url: x.url, urlThumb: x.urlThumb,
+        }))]);
+      }
+      return novo;
+    });
   }
 
-  const pesoTotal = fotos.reduce((s, f) => s + f.grande.size + f.thumb.size, 0);
-  const ganhoMedio = fotos.length
-    ? Math.round(fotos.reduce((s, f) => s + f.ganho, 0) / fotos.length) : 0;
-  const formato = fotos[0]?.ext === "webp" ? "WebP" : "JPEG";
+  // "https://projeto.supabase.co/storage/v1/object/public/veiculos/pasta/arq.jpg"
+  // vira "pasta/arq.jpg"
+  const caminhoNoStorage = (url?: string | null) => {
+    if (!url) return null;
+    const partes = url.split("/object/public/veiculos/");
+    return partes[1] ? decodeURIComponent(partes[1]) : null;
+  };
 
   const set = (k: string, num = false) => (e: any) =>
     setV({ ...v, [k]: num ? Number(e.target.value) : e.target.value });
@@ -79,39 +122,70 @@ export default function FormVeiculo({
       : await supabase.from("veiculos").insert(dados).select("id").single();
 
     if (error) { setErro(error.message); setSalvando(false); return; }
+    const veiculoId = data!.id;
 
-    // sobe grande + thumb já em WebP
+    // 1. apaga as que o usuário removeu — linha e arquivos
+    if (removidas.length) {
+      setProgresso("Removendo fotos...");
+      await supabase.from("veiculo_fotos").delete().in("id", removidas.map((r) => r.id));
+      const caminhos = removidas
+        .flatMap((r) => [caminhoNoStorage(r.url), caminhoNoStorage(r.urlThumb)])
+        .filter(Boolean) as string[];
+      if (caminhos.length) await supabase.storage.from("veiculos").remove(caminhos);
+    }
+
+    // 2. sobe as novas, na posição em que estão na lista
     const marca = Date.now();
-    for (let i = 0; i < fotos.length; i++) {
-      const f = fotos[i];
-      setProgresso(`Enviando foto ${i + 1} de ${fotos.length}...`);
-      const nome = `${slug}/${marca}-${String(i).padStart(2, "0")}`;
-      const arqGrande = `${nome}.${f.ext}`;
-      const arqThumb = `${nome}-thumb.${f.ext}`;
+    const urls = new Map<string, { url: string; thumb: string | null }>();
+    const novas = itens.filter((f) => f.nova);
+    let n = 0;
+
+    for (const f of novas) {
+      n++;
+      setProgresso(`Enviando foto ${n} de ${novas.length}...`);
+      const base = `${slug}/${marca}-${String(itens.indexOf(f)).padStart(2, "0")}`;
+      const arqGrande = `${base}.${f.ext}`;
+      const arqThumb = `${base}-thumb.${f.ext}`;
 
       const [g, t] = await Promise.all([
-        supabase.storage.from("veiculos").upload(arqGrande, f.grande,
+        supabase.storage.from("veiculos").upload(arqGrande, f.blobGrande!,
           { upsert: true, contentType: f.tipo, cacheControl: "31536000" }),
-        supabase.storage.from("veiculos").upload(arqThumb, f.thumb,
+        supabase.storage.from("veiculos").upload(arqThumb, f.blobThumb!,
           { upsert: true, contentType: f.tipo, cacheControl: "31536000" }),
       ]);
 
       if (g.error) {
         const m = /mime type/i.test(g.error.message)
-          ? `o bucket "veiculos" está recusando ${f.tipo}. No Supabase, abra Storage → veiculos → Settings e deixe os tipos permitidos em branco (ou inclua image/webp e image/jpeg).`
+          ? `o bucket "veiculos" está recusando ${f.tipo}. Rode o script corrigir-bucket.sql no Supabase.`
+          : /row-level security/i.test(g.error.message)
+          ? 'faltam as permissões de Storage. Rode o script corrigir-permissoes-storage.sql no Supabase.'
           : g.error.message;
-        setErro(`Falha ao enviar a foto ${i + 1}: ${m}`);
-        setSalvando(false);
+        setErro(`Falha ao enviar a foto ${n}: ${m}`);
+        setSalvando(false); setProgresso("");
         return;
       }
 
-      const url = supabase.storage.from("veiculos").getPublicUrl(arqGrande).data.publicUrl;
-      const thumb = t.error ? null
-        : supabase.storage.from("veiculos").getPublicUrl(arqThumb).data.publicUrl;
-
-      await supabase.from("veiculo_fotos").insert({
-        veiculo_id: data!.id, url, url_thumb: thumb, ordem: i, capa: i === 0 && !v.id,
+      urls.set(f.chave, {
+        url: supabase.storage.from("veiculos").getPublicUrl(arqGrande).data.publicUrl,
+        thumb: t.error ? null
+          : supabase.storage.from("veiculos").getPublicUrl(arqThumb).data.publicUrl,
       });
+    }
+
+    // 3. grava a ordem final. A primeira da lista é sempre a capa.
+    setProgresso("Salvando a ordem...");
+    for (let i = 0; i < itens.length; i++) {
+      const f = itens[i];
+      if (f.nova) {
+        const u = urls.get(f.chave)!;
+        await supabase.from("veiculo_fotos").insert({
+          veiculo_id: veiculoId, url: u.url, url_thumb: u.thumb,
+          ordem: i, capa: i === 0,
+        });
+      } else {
+        await supabase.from("veiculo_fotos")
+          .update({ ordem: i, capa: i === 0 }).eq("id", f.id!);
+      }
     }
 
     setProgresso("");
@@ -171,69 +245,15 @@ export default function FormVeiculo({
           <label className="sm:col-span-2"><span className={rotulo}>Observações</span>
             <textarea rows={2} value={v.observacoes ?? ""} onChange={set("observacoes")} className={`${campo} resize-y`} /></label>
 
-          <div className="sm:col-span-2">
-            <span className={rotulo}>
-              Fotos {fotos.length > 0 && `· ${fotos.length} prontas · ${kb(pesoTotal)}`}
-            </span>
-
-            {previas.length > 0 && (
-              <div className="mb-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
-                {previas.map((src, i) => (
-                  <div key={src} className="relative overflow-hidden rounded-[3px] border border-linha">
-                    <img src={src} alt="" className="block aspect-[3/2] w-full object-cover" />
-                    {i === 0 && (
-                      <span className="absolute left-1 top-1 rounded-sm bg-ouro px-1.5 py-0.5 font-mono text-[8px] tracking-[0.1em] text-bg0">
-                        CAPA
-                      </span>
-                    )}
-                    <button type="button" onClick={() => removerFoto(i)} aria-label="Remover foto"
-                      className="absolute right-1 top-1 rounded-sm bg-bg0/80 p-1">
-                      <Trash2 size={12} className="text-inkDim" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="grid gap-2 sm:grid-cols-2">
-              <label className="flex cursor-pointer flex-col items-center gap-2 rounded-[3px] border border-dashed border-linha bg-bg0 py-7">
-                <Camera size={20} className="text-ouro" />
-                <span className="text-[13px] text-inkDim">Tirar foto agora</span>
-                <input type="file" accept="image/*" capture="environment" multiple className="hidden"
-                  onChange={(e) => { escolherFotos(e.target.files); e.target.value = ""; }} />
-              </label>
-
-              <label className="flex cursor-pointer flex-col items-center gap-2 rounded-[3px] border border-dashed border-linha bg-bg0 py-7">
-                <ImagePlus size={20} className="text-inkFaint" />
-                <span className="text-[13px] text-inkDim">Escolher da galeria</span>
-                <input type="file" accept="image/*" multiple className="hidden"
-                  onChange={(e) => { escolherFotos(e.target.files); e.target.value = ""; }} />
-              </label>
-            </div>
-
-            {falhas.length > 0 && (
-              <ul className="mt-2 space-y-1">
-                {falhas.map((f) => (
-                  <li key={f.arquivo} className="text-[11px] text-[#C25454]">
-                    {f.arquivo}: {f.motivo}
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {processando ? (
-              <p className="mt-2 text-[12px] text-ouro">{processando}</p>
-            ) : fotos.length > 0 ? (
-              <p className="mt-2 text-[11px] text-verde">
-                Comprimidas em {formato} no próprio aparelho
-                {ganhoMedio > 0 && ` — ${ganhoMedio}% mais leves que os originais`}.
-              </p>
-            ) : (
-              <p className="mt-2 text-[11px] text-inkFaint">
-                A primeira foto vira a capa. Fotografe na horizontal, com o carro centralizado.
-              </p>
-            )}
-          </div>
+          <GestorFotos
+            itens={itens}
+            setItens={atualizarItens}
+            aoEscolher={escolherFotos}
+            processando={processando}
+            falhas={falhas}
+            formato={ultimoFormato}
+            ganho={ultimoGanho}
+          />
 
           <div className="flex flex-wrap gap-5 sm:col-span-2">
             <label className="flex cursor-pointer items-center gap-2 text-sm text-inkDim">
