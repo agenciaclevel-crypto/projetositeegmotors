@@ -237,6 +237,12 @@ export default function FormVeiculo({
               <option>Flex</option><option>Gasolina</option><option>Diesel</option><option>Híbrido</option><option>Elétrico</option>
             </select></label>
           <label><span className={rotulo}>Cor</span><input value={v.cor ?? ""} onChange={set("cor")} className={campo} /></label>
+          <label><span className={rotulo}>Motor</span>
+            <input value={v.motor ?? ""} onChange={set("motor")} className={campo} placeholder="2.0 Turbo" /></label>
+          <label><span className={rotulo}>Potência (cv)</span>
+            <input type="number" inputMode="numeric" min={0} max={2000}
+              value={v.potencia_cv ?? ""} className={campo} placeholder="272"
+              onChange={(e) => setV({ ...v, potencia_cv: e.target.value ? Number(e.target.value) : null })} /></label>
 
           <label className="sm:col-span-2"><span className={rotulo}>Itens de série (um por linha)</span>
             <textarea rows={4} className={`${campo} resize-y`} value={(v.opcionais ?? []).join("\n")}
