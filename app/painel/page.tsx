@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Pencil, Trash2, Eye, EyeOff, Users, Package, LogOut } from "lucide-react";
+import { Plus, Pencil, Trash2, Eye, EyeOff, Users, Package, LogOut, Search, X } from "lucide-react";
 import { supabase, brl, formatKm, type Veiculo } from "@/lib/supabase";
 import FormVeiculo from "@/components/FormVeiculo";
 
@@ -13,6 +13,7 @@ type Lead = {
 
 export default function Painel() {
   const [aba, setAba] = useState<"estoque" | "leads">("estoque");
+  const [busca, setBusca] = useState("");
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [lojaId, setLojaId] = useState<string | null>(null);
@@ -59,6 +60,16 @@ export default function Painel() {
     router.push("/login");
   }
 
+  // sem acento e sem caixa: "corola" acha "Corolla", "jeep" acha "Jeep"
+  const limpar = (t: string) =>
+    t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+  const termo = limpar(busca.trim());
+  const visiveis = termo
+    ? veiculos.filter((v) =>
+        limpar(`${v.marca} ${v.modelo} ${v.versao ?? ""} ${(v as any).codigo ?? ""}`).includes(termo))
+    : veiculos;
+
   if (carregando) return <main className="p-10 text-inkDim">Carregando...</main>;
 
   return (
@@ -82,13 +93,44 @@ export default function Painel() {
 
       {aba === "estoque" && (
         <>
-          <button onClick={() => setEditando({})}
-            className="mb-5 inline-flex items-center gap-2 rounded-[3px] bg-ouro px-5 py-3 text-sm font-semibold text-bg0">
-            <Plus size={16} /> Cadastrar carro
-          </button>
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <button onClick={() => setEditando({})}
+              className="inline-flex items-center justify-center gap-2 rounded-[3px] bg-ouro px-5 py-3 text-sm font-semibold text-bg0">
+              <Plus size={16} /> Cadastrar carro
+            </button>
+
+            <div className="relative flex-1">
+              <Search size={16} className="absolute left-3.5 top-3.5 text-inkFaint" />
+              <input value={busca} onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar por marca, modelo ou código"
+                className="w-full rounded-[3px] border border-linha bg-bg1 py-3 pl-10 pr-10 text-sm text-ink" />
+              {busca && (
+                <button onClick={() => setBusca("")} aria-label="Limpar busca"
+                  className="absolute right-3 top-3.5">
+                  <X size={16} className="text-inkFaint" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          <p className="mb-4 font-mono text-[11px] tracking-[0.1em] text-inkFaint">
+            {termo
+              ? `${visiveis.length} DE ${veiculos.length} VEÍCULOS`
+              : `${veiculos.length} ${veiculos.length === 1 ? "VEÍCULO" : "VEÍCULOS"} NO ESTOQUE`}
+          </p>
+
+          {visiveis.length === 0 && (
+            <div className="rounded border border-dashed border-linha py-14 text-center">
+              <p className="text-sm text-inkDim">Nenhum veículo encontrado para "{busca}".</p>
+              <button onClick={() => setBusca("")}
+                className="mt-4 rounded-[3px] border border-linha px-4 py-2.5 text-sm font-semibold">
+                Limpar busca
+              </button>
+            </div>
+          )}
 
           <div className="grid gap-3">
-            {veiculos.map((v) => (
+            {visiveis.map((v) => (
               <div key={v.id} className="flex flex-col gap-4 rounded border border-linha bg-card p-4 sm:flex-row sm:items-center">
                 <div className="flex-1">
                   <p className="text-[15px] font-semibold">
