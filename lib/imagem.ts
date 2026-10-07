@@ -22,7 +22,7 @@ export type FotoPronta = {
 
 export type ErroFoto = { arquivo: string; motivo: string };
 
-const LADO_MAIOR = 1600;
+const LADO_MAIOR = 1500;
 const THUMB = { w: 720, h: 480 };
 
 function desenhar(bmp: ImageBitmap, w: number, h: number, recorte = false) {
@@ -66,17 +66,22 @@ export async function prepararFoto(arquivo: File): Promise<FotoPronta> {
   const w = Math.round(bmp.width * escala);
   const h = Math.round(bmp.height * escala);
 
-  const grande = await comprimir(desenhar(bmp, w, h), 0.82, 0.84);
-  const thumb = await comprimir(desenhar(bmp, THUMB.w, THUMB.h, true), 0.78, 0.8);
+  const grande = await comprimir(desenhar(bmp, w, h), 0.80, 0.76);
+  const thumb = await comprimir(desenhar(bmp, THUMB.w, THUMB.h, true), 0.76, 0.72);
   bmp.close();
 
-  const tipo = grande.type;
+  // Foto que já veio comprimida (WhatsApp, por exemplo) pode sair maior
+  // depois de recomprimida. Nesse caso, fica a original.
+  const usarOriginal = grande.size >= arquivo.size && arquivo.size < 1_200_000;
+  const final = usarOriginal ? arquivo : grande;
+  const tipo = final.type || "image/jpeg";
+
   return {
-    grande, thumb, tipo,
-    ext: tipo === "image/webp" ? "webp" : "jpg",
+    grande: final, thumb, tipo,
+    ext: tipo === "image/webp" ? "webp" : tipo === "image/png" ? "png" : "jpg",
     largura: w, altura: h,
     original: arquivo.name,
-    ganho: Math.max(0, Math.round((1 - grande.size / arquivo.size) * 100)),
+    ganho: Math.max(0, Math.round((1 - final.size / arquivo.size) * 100)),
   };
 }
 
