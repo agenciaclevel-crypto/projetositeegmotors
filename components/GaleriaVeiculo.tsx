@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import type { Foto } from "@/lib/supabase";
 import { useRevela } from "@/lib/useRevela";
+import { registrarUmaVez } from "@/lib/visitas";
 
 export default function GaleriaVeiculo({ fotos, nome }: { fotos: Foto[]; nome: string }) {
   const principal = useRevela<HTMLDivElement>();
@@ -33,7 +34,8 @@ export default function GaleriaVeiculo({ fotos, nome }: { fotos: Foto[]; nome: s
       {fotos.length > 1 && (
         <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-5">
           {fotos.map((f, i) => (
-            <Miniatura key={f.url} f={f} nome={nome} indice={i} ativa={i === ativa} aoClicar={() => setAtiva(i)} />
+            <Miniatura key={f.url} f={f} nome={nome} indice={i} ativa={i === ativa}
+              aoClicar={() => { setAtiva(i); registrarUmaVez("galeria"); }} />
           ))}
         </div>
       )}

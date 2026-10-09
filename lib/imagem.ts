@@ -71,8 +71,11 @@ export async function prepararFoto(arquivo: File): Promise<FotoPronta> {
   bmp.close();
 
   // Foto que já veio comprimida (WhatsApp, por exemplo) pode sair maior
-  // depois de recomprimida. Nesse caso, fica a original.
-  const usarOriginal = grande.size >= arquivo.size && arquivo.size < 1_200_000;
+  // depois de recomprimida. Nesse caso, fica a original — desde que seja um
+  // formato que o Storage aceita (migracao-seguranca.sql). HEIC e afins
+  // sempre sobem convertidos.
+  const formatoAceito = ["image/webp", "image/jpeg", "image/png"].includes(arquivo.type);
+  const usarOriginal = formatoAceito && grande.size >= arquivo.size && arquivo.size < 1_200_000;
   const final = usarOriginal ? arquivo : grande;
   const tipo = final.type || "image/jpeg";
 

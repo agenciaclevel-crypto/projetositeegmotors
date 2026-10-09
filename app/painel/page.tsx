@@ -1,25 +1,110 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Pencil, Trash2, Eye, EyeOff, Users, Package, LogOut, Search, X } from "lucide-react";
-import { supabase, brl, formatKm, type Veiculo } from "@/lib/supabase";
+import { Plus, Pencil, Trash2, Eye, EyeOff, Users, Package, LogOut, Image as ImageIcon, Store, Search, X, Car as CarIcon, BarChart3 } from "lucide-react";
+import { supabase, brl, formatKm, type Veiculo, type Banner, type Loja } from "@/lib/supabase";
 import FormVeiculo from "@/components/FormVeiculo";
+import FormBanner from "@/components/FormBanner";
+import PainelAnalises from "@/components/PainelAnalises";
 
 type Lead = {
-  id: string; nome: string; telefone: string; origem: string;
-  tipo: string; status: string; mensagem: string | null; criado_em: string;
+  id: string; nome: string; telefone: string; email: string | null; origem: string;
+  tipo: string; status: string; mensagem: string | null; veiculo_id: string | null;
+  veiculo_troca: Record<string, unknown> | null; criado_em: string;
 };
 
+const ROTULOS_STATUS: Record<string, string> = {
+  novo: "Novo", em_atendimento: "Em atendimento", ganho: "Ganho", perdido: "Perdido",
+};
+
+const ROTULOS_ORIGEM: Record<string, string> = {
+  venda: "Venda seu carro", agenciamento: "Agenciamento",
+  financiamento: "Financiamento", banner: "Banner", site: "Site",
+};
+
+/** Clique no WhatsApp pelo banner entra sem telefone: é registro de origem,
+ * não contato para retornar. Serve para separar um do outro na tela. */
+const temTelefone = (l: Lead) => l.telefone.replace(/\D/g, "").length >= 10;
+
+/** Os leads de avaliação antigos foram gravados com origem "site", que não diz
+ * de onde vieram. Como todo lead de reposição nasce na página "Venda seu
+ * carro", a etiqueta é corrigida na leitura — sem precisar mexer no banco. */
+function rotuloOrigem(l: Lead) {
+  if (l.origem === "site" && l.tipo === "reposicao") return "Venda seu carro";
+  return ROTULOS_ORIGEM[l.origem] ?? l.origem;
+}
+
+/** Leads vêm em páginas: a loja com histórico grande não espera tudo carregar. */
+const LEADS_POR_PAGINA = 50;
+
+function formatarData(iso: string) {
+  return new Date(iso).toLocaleString("pt-BR", {
+    day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+  });
+}
+
+/** Mostra os detalhes guardados em veiculo_troca — que muda de cara conforme
+ * a origem: carro pra dar na troca (vender/agenciamento) ou simulação de
+ * financiamento (Simulador). */
+function DetalhesExtras({ troca }: { troca: Record<string, unknown> | null }) {
+  if (!troca) return null;
+
+  if (troca.simulacao) {
+    return (
+      <p className="text-[13px] text-inkDim">
+        <span className="text-inkFaint">Simulação:</span> entrada {brl(Number(troca.entrada) || 0)} ·{" "}
+        {String(troca.prazo)}x de {brl(Number(troca.parcela_estimada) || 0)}
+      </p>
+    );
+  }
+
+  if (troca.marca || troca.modelo) {
+    return (
+      <p className="text-[13px] text-inkDim">
+        <span className="text-inkFaint">Carro na troca:</span> {String(troca.marca ?? "")} {String(troca.modelo ?? "")}
+        {troca.ano ? ` · ${troca.ano}` : ""}{troca.km ? ` · ${troca.km} km` : ""}
+        {troca.valor_pretendido ? ` · pretende ${troca.valor_pretendido}` : ""}
+      </p>
+    );
+  }
+
+  if (troca.tem_troca) {
+    return <p className="text-[13px] text-inkDim">Tem um carro para dar na troca.</p>;
+  }
+
+  return null;
+}
+
 export default function Painel() {
-  const [aba, setAba] = useState<"estoque" | "leads">("estoque");
+  const [aba, setAba] = useState<"estoque" | "leads" | "analises" | "banners" | "loja">("estoque");
   const [busca, setBusca] = useState("");
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [banners, setBanners] = useState<Banner[]>([]);
+  const [loja, setLoja] = useState<Loja | null>(null);
   const [lojaId, setLojaId] = useState<string | null>(null);
   const [editando, setEditando] = useState<Partial<Veiculo> | null>(null);
+  const [editandoBanner, setEditandoBanner] = useState<Partial<Banner> | null>(null);
   const [carregando, setCarregando] = useState(true);
+  const [buscaLead, setBuscaLead] = useState("");
+  const [filtroTipo, setFiltroTipo] = useState("todos");
+  const [filtroOrigem, setFiltroOrigem] = useState("todas");
+  const [filtroStatus, setFiltroStatus] = useState("todos");
+  const [temMaisLeads, setTemMaisLeads] = useState(false);
+  const [carregandoMaisLeads, setCarregandoMaisLeads] = useState(false);
+  const [erroPainel, setErroPainel] = useState("");
   const router = useRouter();
+
+  const origensDosLeads = useMemo(
+    () => Array.from(new Set(leads.map((l) => l.origem))).sort(), [leads]);
+
+  const leadsFiltrados = useMemo(() => leads.filter((l) =>
+    `${l.nome} ${l.mensagem ?? ""}`.toLowerCase().includes(buscaLead.toLowerCase()) &&
+    (filtroTipo === "todos" || l.tipo === filtroTipo) &&
+    (filtroOrigem === "todas" || l.origem === filtroOrigem) &&
+    (filtroStatus === "todos" || l.status === filtroStatus)
+  ), [leads, buscaLead, filtroTipo, filtroOrigem, filtroStatus]);
 
   const carregar = useCallback(async () => {
     const { data: sessao } = await supabase.auth.getSession();
@@ -30,29 +115,105 @@ export default function Painel() {
     if (!perfil?.loja_id) { setCarregando(false); return; }
     setLojaId(perfil.loja_id);
 
-    const [v, l] = await Promise.all([
+    const [v, l, b, lj] = await Promise.all([
       supabase.from("veiculos")
         .select("*, veiculo_fotos(id,url,url_thumb,ordem,capa)")
         .eq("loja_id", perfil.loja_id).order("criado_em", { ascending: false }),
       supabase.from("leads").select("*")
-        .eq("loja_id", perfil.loja_id).order("criado_em", { ascending: false }).limit(50),
+        .eq("loja_id", perfil.loja_id).order("criado_em", { ascending: false })
+        .range(0, LEADS_POR_PAGINA - 1),
+      supabase.from("banners").select("*")
+        .eq("loja_id", perfil.loja_id).order("ordem", { ascending: true }),
+      supabase.from("lojas").select("*").eq("id", perfil.loja_id).single(),
     ]);
+    // Sem isso, uma falha de rede ou de permissão aparece como "loja vazia".
+    const falha = [v, l, b, lj].find((r) => r.error)?.error;
+    setErroPainel(falha ? `Parte dos dados não carregou: ${falha.message}` : "");
+
     setVeiculos((v.data ?? []) as unknown as Veiculo[]);
     setLeads((l.data ?? []) as Lead[]);
+    setTemMaisLeads((l.data?.length ?? 0) === LEADS_POR_PAGINA);
+    setBanners((b.data ?? []) as Banner[]);
+    setLoja((lj.data ?? null) as Loja | null);
     setCarregando(false);
   }, [router]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  async function alternarPublicacao(v: Veiculo) {
-    await supabase.from("veiculos").update({ publicado: !(v as any).publicado }).eq("id", v.id);
+  async function carregarMaisLeads() {
+    if (!lojaId) return;
+    setCarregandoMaisLeads(true);
+    const { data, error } = await supabase.from("leads").select("*")
+      .eq("loja_id", lojaId).order("criado_em", { ascending: false })
+      .range(leads.length, leads.length + LEADS_POR_PAGINA - 1);
+    setCarregandoMaisLeads(false);
+    if (error) { alert(`Falha ao carregar mais leads: ${error.message}`); return; }
+    setLeads((atual) => [...atual, ...((data ?? []) as Lead[])]);
+    setTemMaisLeads((data?.length ?? 0) === LEADS_POR_PAGINA);
+  }
+
+  /** O RLS não devolve erro quando bloqueia um UPDATE ou DELETE: só não mexe
+   * em nenhuma linha. Por isso a contagem também é conferida, senão o botão
+   * "funciona" e nada muda — caso do vendedor tentando excluir. */
+  async function conferir(
+    acao: PromiseLike<{ error: { message: string } | null; count: number | null }>,
+    falha: string,
+  ) {
+    const { error, count } = await acao;
+    if (error) alert(`${falha}: ${error.message}`);
+    else if (count === 0) alert(`${falha}: seu usuário não tem permissão para isso.`);
     carregar();
+  }
+
+  async function alternarPublicacao(v: Veiculo) {
+    await conferir(
+      supabase.from("veiculos").update({ publicado: !(v as any).publicado }, { count: "exact" }).eq("id", v.id),
+      "Falha ao mudar a publicação",
+    );
   }
 
   async function excluir(id: string) {
     if (!confirm("Excluir este veículo? A ação não pode ser desfeita.")) return;
-    await supabase.from("veiculos").delete().eq("id", id);
+    await conferir(
+      supabase.from("veiculos").delete({ count: "exact" }).eq("id", id),
+      "Falha ao excluir o veículo",
+    );
+  }
+
+  async function alternarBannerAtivo(b: Banner) {
+    await conferir(
+      supabase.from("banners").update({ ativo: !b.ativo }, { count: "exact" }).eq("id", b.id),
+      "Falha ao mudar o banner",
+    );
+  }
+
+  async function excluirBanner(id: string) {
+    if (!confirm("Excluir este banner? A ação não pode ser desfeita.")) return;
+    await conferir(
+      supabase.from("banners").delete({ count: "exact" }).eq("id", id),
+      "Falha ao excluir o banner",
+    );
+  }
+
+  async function enviarLogo(arquivo: File) {
+    if (!lojaId) return;
+    const { prepararFoto } = await import("@/lib/imagem");
+    const pronta = await prepararFoto(arquivo);
+    // tipo real do arquivo: o iPhone não gera WebP e a foto sai em JPEG
+    const nome = `${lojaId}/logo-${Date.now()}.${pronta.ext}`;
+    const { error: erroUpload } = await supabase.storage
+      .from("marca").upload(nome, pronta.grande, { upsert: true, contentType: pronta.tipo, cacheControl: "31536000" });
+    if (erroUpload) { alert(`Falha ao enviar a logo: ${erroUpload.message}`); return; }
+    const url = supabase.storage.from("marca").getPublicUrl(nome).data.publicUrl;
+    const { error } = await supabase.from("lojas").update({ logo_claro_url: url }).eq("id", lojaId);
+    if (error) { alert(`Falha ao salvar a logo: ${error.message}`); return; }
     carregar();
+  }
+
+  async function atualizarStatusLead(id: string, status: string) {
+    setLeads((atual) => atual.map((l) => (l.id === id ? { ...l, status } : l)));
+    const { error } = await supabase.from("leads").update({ status }).eq("id", id);
+    if (error) alert(`Falha ao atualizar status: ${error.message}`);
   }
 
   async function sair() {
@@ -81,8 +242,20 @@ export default function Painel() {
         </button>
       </div>
 
-      <div className="mb-7 flex gap-2">
-        {([["estoque", "Estoque", Package], ["leads", "Leads", Users]] as const).map(([k, rot, Ic]) => (
+      {erroPainel && (
+        <p className="mb-5 rounded border border-[#C25454]/45 bg-[#C25454]/10 px-4 py-3 text-sm text-[#E08A8A]">
+          {erroPainel}
+        </p>
+      )}
+
+      <div className="mb-7 flex flex-wrap gap-2">
+        {([
+          ["estoque", "Estoque", Package],
+          ["leads", "Leads", Users],
+          ["analises", "Análises", BarChart3],
+          ["banners", "Banners", ImageIcon],
+          ["loja", "Loja", Store],
+        ] as const).map(([k, rot, Ic]) => (
           <button key={k} onClick={() => setAba(k)}
             className={`inline-flex items-center gap-2 rounded-[3px] px-4 py-2.5 text-sm font-medium ${
               aba === k ? "bg-ouro/15 text-ouro" : "text-inkDim"}`}>
@@ -121,11 +294,17 @@ export default function Painel() {
 
           {visiveis.length === 0 && (
             <div className="rounded border border-dashed border-linha py-14 text-center">
-              <p className="text-sm text-inkDim">Nenhum veículo encontrado para "{busca}".</p>
-              <button onClick={() => setBusca("")}
-                className="mt-4 rounded-[3px] border border-linha px-4 py-2.5 text-sm font-semibold">
-                Limpar busca
-              </button>
+              {termo ? (
+                <>
+                  <p className="text-sm text-inkDim">Nenhum veículo encontrado para "{busca}".</p>
+                  <button onClick={() => setBusca("")}
+                    className="mt-4 rounded-[3px] border border-linha px-4 py-2.5 text-sm font-semibold">
+                    Limpar busca
+                  </button>
+                </>
+              ) : (
+                <p className="text-sm text-inkDim">Nenhum veículo cadastrado ainda.</p>
+              )}
             </div>
           )}
 
@@ -160,28 +339,164 @@ export default function Painel() {
       )}
 
       {aba === "leads" && (
-        <div className="overflow-hidden rounded border border-linha bg-card">
-          {leads.map((l, i) => (
-            <div key={l.id} className={`flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between ${i ? "border-t border-linha" : ""}`}>
-              <div>
-                <p className="text-[15px] font-semibold">{l.nome}</p>
-                <p className="mt-1 font-mono text-[11px] text-inkFaint">
-                  {l.telefone} · {l.mensagem ?? "—"}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {l.tipo === "reposicao" && (
-                  <span className="rounded-sm border border-ouro/35 bg-ouro/10 px-2 py-1 font-mono text-[9px] tracking-[0.12em] text-ouro">REPOSIÇÃO</span>
-                )}
-                <span className="rounded-sm border border-linha bg-bg2 px-2 py-1 font-mono text-[9px] tracking-[0.1em] text-inkDim">
-                  {l.origem.toUpperCase()}
-                </span>
-                <a href={`https://wa.me/55${l.telefone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer"
-                  className="rounded-[3px] bg-zap px-3 py-2 text-xs font-semibold text-white">Responder</a>
-              </div>
+        <>
+          <div className="mb-4 flex flex-col gap-2.5 sm:flex-row">
+            <div className="relative flex-1">
+              <Search size={16} className="absolute left-3.5 top-3 text-inkFaint" />
+              <input value={buscaLead} onChange={(e) => setBuscaLead(e.target.value)}
+                placeholder="Buscar por nome ou mensagem"
+                className="w-full rounded-[3px] border border-linha bg-bg1 py-2.5 pl-10 pr-3 text-sm text-ink" />
             </div>
-          ))}
-          {leads.length === 0 && <p className="p-8 text-center text-sm text-inkDim">Nenhum lead ainda.</p>}
+            <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)}
+              className="rounded-[3px] border border-linha bg-bg1 px-3 py-2.5 text-sm text-ink">
+              <option value="todos">Compra e reposição</option>
+              <option value="compra">Só compra</option>
+              <option value="reposicao">Só reposição</option>
+            </select>
+            <select value={filtroOrigem} onChange={(e) => setFiltroOrigem(e.target.value)}
+              className="rounded-[3px] border border-linha bg-bg1 px-3 py-2.5 text-sm text-ink">
+              <option value="todas">Todas as origens</option>
+              {origensDosLeads.map((o) => (
+                <option key={o} value={o}>{ROTULOS_ORIGEM[o] ?? o}</option>
+              ))}
+            </select>
+            <select value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)}
+              className="rounded-[3px] border border-linha bg-bg1 px-3 py-2.5 text-sm text-ink">
+              <option value="todos">Todos os status</option>
+              {Object.entries(ROTULOS_STATUS).map(([v, rot]) => <option key={v} value={v}>{rot}</option>)}
+            </select>
+          </div>
+
+          <p className="mb-3 font-mono text-[11px] tracking-[0.1em] text-inkFaint">
+            {leadsFiltrados.length} DE {leads.length} {leads.length === 1 ? "LEAD" : "LEADS"}
+          </p>
+
+          <div className="grid gap-3">
+            {leadsFiltrados.map((l) => {
+              const veiculoInteresse = l.veiculo_id ? veiculos.find((v) => v.id === l.veiculo_id) : null;
+              return (
+                <div key={l.id} className="rounded border border-linha bg-card p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-[15px] font-semibold">{l.nome}</p>
+                      <p className="mt-1 font-mono text-[11px] text-inkFaint">
+                        {formatarData(l.criado_em)}
+                        {temTelefone(l) ? ` · ${l.telefone}` : ""}
+                        {l.email ? ` · ${l.email}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`rounded-sm border px-2 py-1 font-mono text-[9px] tracking-[0.12em] ${
+                        l.tipo === "reposicao" ? "border-ouro/35 bg-ouro/10 text-ouro" : "border-linha bg-bg2 text-inkDim"}`}>
+                        {l.tipo === "reposicao" ? "REPOSIÇÃO" : "COMPRA"}
+                      </span>
+                      <span className="rounded-sm border border-linha bg-bg2 px-2 py-1 font-mono text-[9px] tracking-[0.1em] text-inkDim">
+                        {rotuloOrigem(l).toUpperCase()}
+                      </span>
+                      <select value={l.status} onChange={(e) => atualizarStatusLead(l.id, e.target.value)}
+                        className="rounded-sm border border-linha bg-bg2 px-2 py-1.5 font-mono text-[9px] tracking-[0.1em] text-inkDim">
+                        {Object.entries(ROTULOS_STATUS).map(([v, rot]) => (
+                          <option key={v} value={v}>{rot.toUpperCase()}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {(veiculoInteresse || l.veiculo_troca || l.mensagem) && (
+                    <div className="mt-3 space-y-1.5 border-t border-linha pt-3">
+                      {veiculoInteresse && (
+                        <p className="flex items-center gap-1.5 text-[13px] text-inkDim">
+                          <CarIcon size={13} className="shrink-0 text-inkFaint" />
+                          Interesse em: {veiculoInteresse.marca} {veiculoInteresse.modelo} {veiculoInteresse.versao} — {brl(veiculoInteresse.preco)}
+                        </p>
+                      )}
+                      <DetalhesExtras troca={l.veiculo_troca} />
+                      {l.mensagem && <p className="text-[13px] text-inkDim">{l.mensagem}</p>}
+                    </div>
+                  )}
+
+                  {temTelefone(l) ? (
+                    <a href={`https://wa.me/55${l.telefone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer"
+                      className="mt-3 inline-flex rounded-[3px] bg-zap px-3 py-2 text-xs font-semibold text-white">
+                      Responder no WhatsApp
+                    </a>
+                  ) : (
+                    <p className="mt-3 text-[12px] text-inkFaint">
+                      Registro de origem — a pessoa foi direto para o WhatsApp, sem deixar contato.
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+            {leadsFiltrados.length === 0 && (
+              <p className="rounded border border-dashed border-linha py-10 text-center text-sm text-inkDim">
+                {leads.length === 0 ? "Nenhum lead ainda." : "Nenhum lead com esses filtros."}
+              </p>
+            )}
+          </div>
+
+          {temMaisLeads && (
+            <button onClick={carregarMaisLeads} disabled={carregandoMaisLeads}
+              className="mt-4 w-full rounded-[3px] border border-linha py-3 text-sm text-inkDim disabled:opacity-45">
+              {carregandoMaisLeads ? "Carregando..." : "Carregar leads mais antigos"}
+            </button>
+          )}
+        </>
+      )}
+
+      {aba === "analises" && lojaId && <PainelAnalises lojaId={lojaId} veiculos={veiculos} />}
+
+      {aba === "banners" && (
+        <>
+          <button onClick={() => setEditandoBanner({})}
+            className="mb-5 inline-flex items-center gap-2 rounded-[3px] bg-ouro px-5 py-3 text-sm font-semibold text-bg0">
+            <Plus size={16} /> Novo banner
+          </button>
+
+          <div className="grid gap-3">
+            {banners.map((b) => (
+              <div key={b.id} className="flex flex-col gap-4 rounded border border-linha bg-card p-4 sm:flex-row sm:items-center">
+                <img src={b.imagem_url} alt="" className="h-16 w-28 shrink-0 rounded-[3px] object-cover" />
+                <div className="flex-1">
+                  <p className="text-[15px] font-semibold">{b.titulo}</p>
+                  <p className="mt-1 text-[13px] text-inkDim">{b.legenda}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => alternarBannerAtivo(b)}
+                    className={`inline-flex items-center gap-2 rounded-[3px] border px-3 py-2 font-mono text-[9px] tracking-[0.1em] ${
+                      b.ativo ? "border-verde/45 bg-verde/15 text-[#8FC7A3]" : "border-linha bg-bg2 text-inkFaint"}`}>
+                    {b.ativo ? <Eye size={13} /> : <EyeOff size={13} />}
+                    {b.ativo ? "NO AR" : "FORA DO AR"}
+                  </button>
+                  <button onClick={() => setEditandoBanner(b)} aria-label="Editar"
+                    className="rounded-[3px] border border-linha p-2.5"><Pencil size={14} /></button>
+                  <button onClick={() => excluirBanner(b.id)} aria-label="Excluir"
+                    className="rounded-[3px] border border-linha p-2.5"><Trash2 size={14} /></button>
+                </div>
+              </div>
+            ))}
+            {banners.length === 0 && (
+              <p className="rounded border border-dashed border-linha py-10 text-center text-sm text-inkDim">
+                Nenhum banner cadastrado ainda.
+              </p>
+            )}
+          </div>
+        </>
+      )}
+
+      {aba === "loja" && (
+        <div className="max-w-[420px] rounded border border-linha bg-card p-6">
+          <p className={rotuloLoja}>Logo da loja (fundo transparente, de preferência)</p>
+          {loja?.logo_claro_url ? (
+            <img src={loja.logo_claro_url} alt="Logo atual" className="mt-3 h-14 w-auto rounded bg-bg0 p-2" />
+          ) : (
+            <p className="mt-3 text-sm text-inkDim">Nenhuma logo enviada ainda.</p>
+          )}
+          <label className="mt-4 flex cursor-pointer flex-col items-center gap-2 rounded-[3px] border border-dashed border-linha bg-bg0 py-6">
+            <span className="text-[13px] text-inkDim">Enviar / trocar logo</span>
+            <input type="file" accept="image/*" className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) enviarLogo(f); e.target.value = ""; }} />
+          </label>
         </div>
       )}
 
@@ -189,6 +504,13 @@ export default function Painel() {
         <FormVeiculo veiculo={editando} lojaId={lojaId}
           fechar={() => setEditando(null)} salvo={() => { setEditando(null); carregar(); }} />
       )}
+
+      {editandoBanner && lojaId && (
+        <FormBanner banner={editandoBanner} lojaId={lojaId}
+          fechar={() => setEditandoBanner(null)} salvo={() => { setEditandoBanner(null); carregar(); }} />
+      )}
     </main>
   );
 }
+
+const rotuloLoja = "font-mono text-[9px] uppercase tracking-[0.14em] text-inkFaint";

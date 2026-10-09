@@ -1,5 +1,5 @@
 -- ---------------------------------------------------------------------------
--- VISITAS — contagem de acesso ao site, lida na aba "Acessos" do painel
+-- VISITAS — contagem de acesso ao site, lida na aba "Análises" do painel
 --
 -- Rode este script uma vez no Supabase: SQL Editor -> New query -> colar ->
 -- Run. Pode rodar de novo sem medo: nada aqui apaga dado, e as policies são

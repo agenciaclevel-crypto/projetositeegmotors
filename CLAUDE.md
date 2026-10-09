@@ -25,8 +25,16 @@ que pretende replicar a mesma base para outras lojas parceiras.
 - As páginas públicas são estáticas com `revalidate = 300`. Não troque por
   renderização dinâmica sem motivo: a velocidade e o SEO dependem disso.
 - Fotos são convertidas para WebP no navegador (`lib/imagem.ts`) antes do
-  upload. Não suba arquivo original para o Storage.
+  upload, com JPEG de reserva no iPhone, que não gera WebP. Não suba arquivo
+  original para o Storage, salvo a exceção de foto já leve tratada lá.
 - Textos de interface em português do Brasil, sem gerúndio desnecessário.
+- Link de WhatsApp, telefone ou rota é contado sozinho pelo `RegistroVisita`.
+  Ao criar um botão novo, marque onde ele está com `data-rastreio="..."`; ao
+  criar formulário público, marque o bloco com `data-formulario="<categoria
+  do lead>"`, a mesma passada para `eventoLead`.
+- Upload pelo site do GitHub troca o arquivo inteiro. Em 07/10/2026 uma cópia
+  antiga do painel apagou as abas de acessos, banners e loja. Sempre parta da
+  versão atual do repositório antes de editar.
 - Identidade visual: fundo grafite escuro, dourado #C7A25C como destaque,
   Oswald para títulos, Inter para texto, JetBrains Mono para dados.
 
@@ -36,10 +44,15 @@ que pretende replicar a mesma base para outras lojas parceiras.
 - `app/veiculo/[slug]/` — página do veículo, com JSON-LD para o Google
 - `app/vender/` — formulário de avaliação (lead de reposição)
 - `app/contato/` — mapa e dados da loja
-- `app/painel/` — área da loja: estoque e leads (protegida por RLS)
+- `app/painel/` — área da loja: estoque, leads, análises, banners e logo
+  (protegida por RLS)
 - `app/feed/estoque.xml/` — feed de estoque para os portais de anúncio
 - `lib/supabase.ts` — cliente, tipos e queries
 - `lib/imagem.ts` — conversão de foto para WebP
+- `lib/visitas.ts` — registro de visita e de comportamento (WhatsApp, busca,
+  formulário, tempo de leitura). Tabelas `visitas` e `eventos`
+  (`migracao-visitas.sql`, `migracao-comportamento.sql`)
+- `lib/analises.ts` + `components/PainelAnalises.tsx` — aba "Análises"
 
 ## Comandos
 

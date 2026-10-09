@@ -12,8 +12,10 @@
 --   3. Carro, foto e banner de loja desativada saem do ar junto com ela.
 --   4. Vendedor não exclui carro nem mexe em banner; isso é do gestor.
 --   5. Gestor pode trocar a logo da loja (e só a logo).
---   6. Storage: cada loja só grava na própria pasta; bucket aceita só WebP
---      de até 5 MB.
+--   6. Storage: cada loja só grava na própria pasta; bucket aceita só imagem
+--      (WebP, JPEG ou PNG) de até 5 MB. JPEG porque o Safari do iPhone não
+--      gera WebP (lib/imagem.ts cai para JPEG); PNG porque foto pequena que
+--      já veio leve sobe como está.
 -- ---------------------------------------------------------------------------
 
 -- Funções auxiliares. SECURITY DEFINER para ler perfis sem cair no RLS de
@@ -109,7 +111,8 @@ grant update (logo_claro_url) on lojas to authenticated;
 -- Os buckets continuam públicos para leitura (a URL da foto abre direto).
 -- Escrita só na pasta da própria loja: <loja_id>/...
 update storage.buckets
-   set file_size_limit = 5242880, allowed_mime_types = array['image/webp']
+   set file_size_limit = 5242880,
+       allowed_mime_types = array['image/webp', 'image/jpeg', 'image/png']
  where id in ('veiculos', 'marca');
 
 drop policy if exists "clevel_fotos_leitura_equipe" on storage.objects;

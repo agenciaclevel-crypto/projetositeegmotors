@@ -52,7 +52,7 @@ export default function Banners({ banners, loja }: { banners: Banner[]; loja: Lo
             <p className="mt-2.5 text-base leading-relaxed text-inkDim">{b.legenda}</p>
 
             <a href={linkWhatsApp(loja, b.link || `Olá! Vi a campanha "${b.titulo}" no site.`)}
-              target="_blank" rel="noreferrer"
+              target="_blank" rel="noreferrer" data-rastreio="banner"
               onClick={registrarCliqueNoBanner}
               className="mt-7 inline-flex w-fit items-center gap-2 rounded-[3px] bg-zap px-6 py-3.5 text-[15px] font-semibold text-white">
               <MessageCircle size={17} /> Falar no WhatsApp

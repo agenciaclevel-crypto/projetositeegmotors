@@ -52,7 +52,7 @@ export default function FormAgenciamento({ lojaId }: { lojaId: string }) {
   }
 
   return (
-    <div className="mt-10 rounded border border-linha bg-card">
+    <div data-formulario="agenciamento" className="mt-10 rounded border border-linha bg-card">
       <div className="border-b border-linha p-6">
         <p className={rotulo}>Seus dados</p>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">

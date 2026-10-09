@@ -81,13 +81,13 @@ export default function Header({ loja }: { loja: Loja }) {
 
         <div className="flex items-center gap-3">
           {loja.whatsapp && (
-            <a href={`tel:+55${digitosNacionais(loja.whatsapp)}`}
+            <a href={`tel:+55${digitosNacionais(loja.whatsapp)}`} data-rastreio="topo do site"
               className="hidden items-center gap-1.5 text-sm font-medium text-inkDim transition-colors hover:text-ink sm:flex">
               <Phone size={15} /> {formatarTelefone(loja.whatsapp)}
             </a>
           )}
           <a href={linkWhatsApp(loja, `Olá! Vim pelo site da ${loja.nome}.`)}
-            target="_blank" rel="noreferrer"
+            target="_blank" rel="noreferrer" data-rastreio="topo do site"
             className="inline-flex items-center gap-2 rounded-[3px] bg-zap px-5 py-3 text-sm font-semibold text-white">
             <MessageCircle size={16} /><span className="hidden sm:inline">WhatsApp</span>
           </a>

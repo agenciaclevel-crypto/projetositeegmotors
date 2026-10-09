@@ -49,11 +49,12 @@ export default async function Contato() {
             className="block h-[340px] w-full border-0"
           />
           <div className="flex flex-wrap gap-2 border-t border-linha p-4">
-            <a href={rota} target="_blank" rel="noreferrer"
+            <a href={rota} target="_blank" rel="noreferrer" data-rastreio="página de contato"
               className="inline-flex items-center gap-2 rounded-[3px] bg-ouro px-5 py-3 text-sm font-semibold text-bg0">
               <MapPin size={16} /> Traçar rota até a loja
             </a>
             <a href={linkWhatsApp(loja, "Olá! Quero agendar uma visita à loja.")} target="_blank" rel="noreferrer"
+              data-rastreio="página de contato"
               className="inline-flex items-center gap-2 rounded-[3px] border border-linha px-5 py-3 text-sm font-semibold">
               <MessageCircle size={16} /> Agendar visita
             </a>
