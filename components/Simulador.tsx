@@ -63,7 +63,7 @@ export default function Simulador({
   }
 
   return (
-    <div className="mt-7 rounded border border-[#2C303A] bg-[#16181D] p-5">
+    <div data-formulario="financiamento" className="mt-7 rounded border border-[#2C303A] bg-[#16181D] p-5">
       <div className="mb-4 font-mono text-[9px] tracking-[0.14em] text-[#6E7280]">
         SIMULAR FINANCIAMENTO
       </div>

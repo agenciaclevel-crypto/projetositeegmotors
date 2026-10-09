@@ -7,6 +7,7 @@
  */
 
 import { eventoPixel } from "./pixel";
+import { registrarEvento } from "./visitas";
 
 export const GA_ID: string = "G-Y02WZDZE08";
 
@@ -39,7 +40,9 @@ export function eventoGA(evento: string, dados?: Record<string, unknown>) {
 /**
  * Conversão do site: alguém preencheu um formulário. Avisa o pixel da Meta
  * ("Lead") e o Google Analytics ("generate_lead") de uma vez só, para as
- * campanhas dos dois lados poderem otimizar por lead em vez de tráfego.
+ * campanhas dos dois lados poderem otimizar por lead em vez de tráfego. Também
+ * grava no nosso banco, ligado ao visitante, para o painel saber de qual canal
+ * veio cada lead e quantos desistiram no meio do formulário.
  */
 export function eventoLead(dados: { nome: string; categoria: string; valor?: number }) {
   const valor = dados.valor ? { value: dados.valor, currency: "BRL" } : {};
@@ -55,4 +58,6 @@ export function eventoLead(dados: { nome: string; categoria: string; valor?: num
     lead_source: dados.categoria,
     ...valor,
   });
+
+  registrarEvento("lead", { rotulo: dados.categoria, valor: dados.valor ?? null });
 }

@@ -1,13 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search, Car } from "lucide-react";
 import VeiculoCard from "./VeiculoCard";
 import { type Veiculo } from "@/lib/supabase";
 import { logoDaMarca } from "@/lib/marcas";
+import { registrarEvento } from "@/lib/visitas";
 
 const campo = "w-full rounded-[3px] border border-linha bg-bg1 px-3 py-2.5 text-sm text-ink";
 const rotulo = "mb-1.5 block font-mono text-[9px] uppercase tracking-[0.14em] text-inkFaint";
+
+const ROTULOS_ORDEM: Record<string, string> = {
+  menor: "menor preço", maior: "maior preço", km: "menor quilometragem",
+};
 
 export default function Vitrine({ veiculos }: { veiculos: Veiculo[] }) {
   const [busca, setBusca] = useState("");
@@ -51,6 +56,25 @@ export default function Vitrine({ veiculos }: { veiculos: Veiculo[] }) {
     return r;
   }, [veiculos, busca, marca, condicao, cambio, ordem]);
 
+  // A busca só é registrada quando a pessoa para de digitar: "c", "co",
+  // "cor" não viram três buscas. O número de carros achados considera só o
+  // termo, sem os outros filtros — é ele que diz "procuraram e não tínhamos".
+  useEffect(() => {
+    const termo = busca.trim();
+    if (termo.length < 2) return;
+    const espera = setTimeout(() => {
+      const achados = veiculos.filter((v) =>
+        `${v.marca} ${v.modelo} ${v.versao ?? ""}`.toLowerCase().includes(termo.toLowerCase())).length;
+      registrarEvento("busca", { rotulo: termo.toLowerCase(), valor: achados });
+    }, 1500);
+    return () => clearTimeout(espera);
+  }, [busca, veiculos]);
+
+  /** Filtro escolhido conta como interesse; voltar para "todos" não. */
+  const registrarFiltro = (nome: string, valor: string | null) => {
+    if (valor) registrarEvento("filtro", { rotulo: `${nome}: ${valor}` });
+  };
+
   const limpar = () => {
     setBusca(""); setMarca("todas"); setCondicao("todos"); setCambio("Todos");
   };
@@ -80,7 +104,8 @@ export default function Vitrine({ veiculos }: { veiculos: Veiculo[] }) {
             const logo = logoDaMarca(rotulo);
             const ativa = marca === chave;
             return (
-              <button key={chave} onClick={() => setMarca(ativa ? "todas" : chave)}
+              <button key={chave}
+                onClick={() => { setMarca(ativa ? "todas" : chave); registrarFiltro("marca", ativa ? null : rotulo); }}
                 aria-pressed={ativa}
                 className={`flex flex-col items-center gap-2 rounded-[3px] border px-2 py-4 transition-colors ${
                   ativa ? "border-ouro bg-ouro/10" : "border-linha bg-bg1 hover:border-ouro/50"}`}>
@@ -103,19 +128,28 @@ export default function Vitrine({ veiculos }: { veiculos: Veiculo[] }) {
 
       <div className="mt-8 grid gap-3 border-t border-linha pt-7 md:grid-cols-3">
         <label><span className={rotulo}>Condição</span>
-          <select value={condicao} onChange={(e) => setCondicao(e.target.value)} className={campo}>
+          <select value={condicao} className={campo} onChange={(e) => {
+            setCondicao(e.target.value);
+            registrarFiltro("condição", e.target.value === "todos" ? null : e.target.value);
+          }}>
             <option value="todos">Novos e seminovos</option>
             <option value="novo">Somente novos</option>
             <option value="seminovo">Somente seminovos</option>
           </select>
         </label>
         <label><span className={rotulo}>Câmbio</span>
-          <select value={cambio} onChange={(e) => setCambio(e.target.value)} className={campo}>
+          <select value={cambio} className={campo} onChange={(e) => {
+            setCambio(e.target.value);
+            registrarFiltro("câmbio", e.target.value === "Todos" ? null : e.target.value);
+          }}>
             {["Todos", "Automático", "CVT", "Manual"].map((c) => <option key={c}>{c}</option>)}
           </select>
         </label>
         <label><span className={rotulo}>Ordenar</span>
-          <select value={ordem} onChange={(e) => setOrdem(e.target.value)} className={campo}>
+          <select value={ordem} className={campo} onChange={(e) => {
+            setOrdem(e.target.value);
+            registrarFiltro("ordem", ROTULOS_ORDEM[e.target.value] ?? null);
+          }}>
             <option value="destaque">Destaques primeiro</option>
             <option value="menor">Menor preço</option>
             <option value="maior">Maior preço</option>

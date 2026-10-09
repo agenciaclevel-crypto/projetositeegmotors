@@ -14,7 +14,8 @@ atende várias lojas, cada uma com seu domínio, cor e estoque.
 | `app/vender/page.tsx` | Formulário de avaliação (reposição) |
 | `app/contato/page.tsx` | Mapa do Google e rota até a loja |
 | `app/feed/estoque.xml/route.ts` | **Feed de estoque para os portais** |
-| `app/painel/page.tsx` | Painel: estoque, leads, publicar/despublicar |
+| `app/painel/page.tsx` | Painel: estoque, leads, análises, banners e logo |
+| `components/PainelAnalises.tsx` | Aba "Análises": visitas, contatos, carros, canais, buscas e horários |
 | `lib/imagem.ts` | Converte a foto da câmera para WebP antes de subir |
 | `app/login/page.tsx` | Login com Supabase Auth |
 | `app/sitemap.ts` / `robots.ts` | Indexação no Google |
