@@ -199,9 +199,10 @@ export default function Painel() {
     if (!lojaId) return;
     const { prepararFoto } = await import("@/lib/imagem");
     const pronta = await prepararFoto(arquivo);
-    const nome = `${lojaId}/logo-${Date.now()}.webp`;
+    // tipo real do arquivo: o iPhone não gera WebP e a foto sai em JPEG
+    const nome = `${lojaId}/logo-${Date.now()}.${pronta.ext}`;
     const { error: erroUpload } = await supabase.storage
-      .from("marca").upload(nome, pronta.grande, { upsert: true, contentType: "image/webp", cacheControl: "31536000" });
+      .from("marca").upload(nome, pronta.grande, { upsert: true, contentType: pronta.tipo, cacheControl: "31536000" });
     if (erroUpload) { alert(`Falha ao enviar a logo: ${erroUpload.message}`); return; }
     const url = supabase.storage.from("marca").getPublicUrl(nome).data.publicUrl;
     const { error } = await supabase.from("lojas").update({ logo_claro_url: url }).eq("id", lojaId);

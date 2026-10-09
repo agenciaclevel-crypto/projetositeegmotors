@@ -25,7 +25,8 @@ que pretende replicar a mesma base para outras lojas parceiras.
 - As páginas públicas são estáticas com `revalidate = 300`. Não troque por
   renderização dinâmica sem motivo: a velocidade e o SEO dependem disso.
 - Fotos são convertidas para WebP no navegador (`lib/imagem.ts`) antes do
-  upload. Não suba arquivo original para o Storage.
+  upload, com JPEG de reserva no iPhone, que não gera WebP. Não suba arquivo
+  original para o Storage, salvo a exceção de foto já leve tratada lá.
 - Textos de interface em português do Brasil, sem gerúndio desnecessário.
 - Link de WhatsApp, telefone ou rota é contado sozinho pelo `RegistroVisita`.
   Ao criar um botão novo, marque onde ele está com `data-rastreio="..."`; ao

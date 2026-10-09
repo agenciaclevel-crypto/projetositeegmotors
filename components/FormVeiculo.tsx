@@ -13,6 +13,15 @@ const gerarSlug = (s: string) =>
   s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
     .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
+/** Extensão pelo tipo real do arquivo: a capa pode ser WebP e a miniatura
+ * JPEG (ou o contrário), conforme o que o navegador conseguiu gerar. */
+const extensao = (tipo: string) =>
+  tipo === "image/webp" ? "webp" : tipo === "image/png" ? "png" : "jpg";
+
+/** Para onde mandar quem esbarra numa recusa do Storage: é o script do
+ * repositório que define pasta por loja e formatos aceitos. */
+const AJUDA_STORAGE = "Rode o migracao-seguranca.sql no Supabase (SQL Editor) e tente de novo.";
+
 export default function FormVeiculo({
   veiculo, lojaId, fechar, salvo,
 }: { veiculo: Partial<Veiculo>; lojaId: string; fechar: () => void; salvo: () => void }) {
@@ -99,15 +108,41 @@ export default function FormVeiculo({
   const set = (k: string, num = false) => (e: any) =>
     setV({ ...v, [k]: num ? Number(e.target.value) : e.target.value });
 
-  const valido = v.marca?.trim() && v.modelo?.trim() && v.preco > 0;
+  // O que ainda falta para poder salvar. Botão travado sem explicação é o
+  // tipo de coisa que faz a pessoa achar que o sistema quebrou.
+  const faltando = [
+    !v.marca?.trim() ? "marca" : null,
+    !v.modelo?.trim() ? "modelo" : null,
+    !(Number(v.preco) > 0) ? "preço" : null,
+  ].filter(Boolean) as string[];
+  const valido = faltando.length === 0;
+
+  /** O endereço do carro no site (slug) é único por loja. Se a loja tem dois
+   * carros iguais no pátio — mesmo modelo, versão e ano — o segundo precisa de
+   * um endereço próprio, senão o banco recusa o cadastro. */
+  async function slugLivre(base: string) {
+    const { data } = await supabase.from("veiculos")
+      .select("slug").eq("loja_id", lojaId).like("slug", `${base}%`);
+    const usados = new Set((data ?? []).map((r) => r.slug as string));
+    if (!usados.has(base)) return base;
+    for (let i = 2; i <= 50; i++) {
+      if (!usados.has(`${base}-${i}`)) return `${base}-${i}`;
+    }
+    return `${base}-${Date.now().toString(36)}`;
+  }
 
   async function salvar() {
-    if (!valido) return;
+    if (!valido) {
+      setErro(`Falta preencher: ${faltando.join(", ")}.`);
+      return;
+    }
     setSalvando(true); setErro("");
 
-    const slug = v.slug || gerarSlug(`${v.marca} ${v.modelo} ${v.versao ?? ""} ${v.ano_modelo}`);
-    const dados = {
-      loja_id: lojaId, slug,
+    const base = v.slug || gerarSlug(`${v.marca} ${v.modelo} ${v.versao ?? ""} ${v.ano_modelo}`);
+    let slug = v.id ? base : await slugLivre(base);
+
+    const dados = (s: string) => ({
+      loja_id: lojaId, slug: s,
       marca: v.marca, modelo: v.modelo, versao: v.versao,
       ano_fabricacao: v.ano_fabricacao, ano_modelo: v.ano_modelo,
       km: v.km, cambio: v.cambio, combustivel: v.combustivel, motor: v.motor,
@@ -115,14 +150,32 @@ export default function FormVeiculo({
       condicao: v.condicao, preco: v.preco, preco_de: v.preco_de,
       opcionais: v.opcionais, observacoes: v.observacoes,
       publicado: v.publicado, destaque: v.destaque,
-    };
+    });
 
-    const { data, error } = v.id
-      ? await supabase.from("veiculos").update(dados).eq("id", v.id).select("id").single()
-      : await supabase.from("veiculos").insert(dados).select("id").single();
+    let resposta = v.id
+      ? await supabase.from("veiculos").update(dados(slug)).eq("id", v.id).select("id").single()
+      : await supabase.from("veiculos").insert(dados(slug)).select("id").single();
 
-    if (error) { setErro(error.message); setSalvando(false); return; }
-    const veiculoId = data!.id;
+    // 23505 = endereço repetido. Só acontece se o slug foi ocupado entre a
+    // checagem e o cadastro; tenta de novo com um sufixo único.
+    if (resposta.error && !v.id && resposta.error.code === "23505") {
+      slug = `${base}-${Date.now().toString(36)}`;
+      resposta = await supabase.from("veiculos").insert(dados(slug)).select("id").single();
+    }
+
+    if (resposta.error) {
+      setErro(resposta.error.code === "23505"
+        ? "Já existe um veículo com esse mesmo endereço no site. Mude a versão ou o ano e tente de novo."
+        : resposta.error.message);
+      setSalvando(false);
+      return;
+    }
+
+    // Guarda o id assim que o veículo é criado: se o envio das fotos falhar no
+    // meio, um novo clique em salvar atualiza este carro em vez de cadastrar
+    // um segundo igual.
+    const veiculoId = resposta.data!.id as string;
+    if (!v.id) setV((atual: any) => ({ ...atual, id: veiculoId, slug }));
 
     // 1. apaga as que o usuário removeu — linha e arquivos
     if (removidas.length) {
@@ -143,22 +196,26 @@ export default function FormVeiculo({
     for (const f of novas) {
       n++;
       setProgresso(`Enviando foto ${n} de ${novas.length}...`);
-      const base = `${slug}/${marca}-${String(itens.indexOf(f)).padStart(2, "0")}`;
-      const arqGrande = `${base}.${f.ext}`;
-      const arqThumb = `${base}-thumb.${f.ext}`;
+      // A pasta da loja vem primeiro: é por ela que o Storage decide quem grava
+      // (migracao-seguranca.sql). Sem ela, o envio é recusado.
+      const base = `${lojaId}/${slug}/${marca}-${String(itens.indexOf(f)).padStart(2, "0")}`;
+      const tipoGrande = f.blobGrande!.type || f.tipo || "image/jpeg";
+      const tipoThumb = f.blobThumb!.type || tipoGrande;
+      const arqGrande = `${base}.${extensao(tipoGrande)}`;
+      const arqThumb = `${base}-thumb.${extensao(tipoThumb)}`;
 
       const [g, t] = await Promise.all([
         supabase.storage.from("veiculos").upload(arqGrande, f.blobGrande!,
-          { upsert: true, contentType: f.tipo, cacheControl: "31536000" }),
+          { upsert: true, contentType: tipoGrande, cacheControl: "31536000" }),
         supabase.storage.from("veiculos").upload(arqThumb, f.blobThumb!,
-          { upsert: true, contentType: f.tipo, cacheControl: "31536000" }),
+          { upsert: true, contentType: tipoThumb, cacheControl: "31536000" }),
       ]);
 
       if (g.error) {
         const m = /mime type/i.test(g.error.message)
-          ? `o bucket "veiculos" está recusando ${f.tipo}. Rode o script corrigir-bucket.sql no Supabase.`
+          ? `o Storage está recusando fotos em ${tipoGrande}. ${AJUDA_STORAGE}`
           : /row-level security/i.test(g.error.message)
-          ? 'faltam as permissões de Storage. Rode o script corrigir-permissoes-storage.sql no Supabase.'
+          ? `o Storage recusou a pasta da loja. ${AJUDA_STORAGE}`
           : g.error.message;
         setErro(`Falha ao enviar a foto ${n}: ${m}`);
         setSalvando(false); setProgresso("");
@@ -275,9 +332,15 @@ export default function FormVeiculo({
           {erro && <p className="text-xs text-[#C25454] sm:col-span-2">{erro}</p>}
         </div>
 
+        {!valido && !erro && (
+          <p className="px-6 pb-3 text-right text-[12px] text-inkFaint">
+            Falta preencher: {faltando.join(", ")}.
+          </p>
+        )}
+
         <div className="flex justify-end gap-3 px-6 pb-6">
           <button onClick={fechar} className="rounded-[3px] border border-linha px-5 py-3 text-sm font-semibold">Cancelar</button>
-          <button onClick={salvar} disabled={!valido || salvando}
+          <button onClick={salvar} disabled={salvando}
             className="rounded-[3px] bg-ouro px-5 py-3 text-sm font-semibold text-bg0 disabled:opacity-45">
             {salvando ? (progresso || "Salvando...") : v.id ? "Salvar alterações" : "Cadastrar veículo"}
           </button>

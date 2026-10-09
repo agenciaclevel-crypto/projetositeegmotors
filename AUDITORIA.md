@@ -20,7 +20,7 @@ de uso normal.
 | # | Gravidade | Achado | Situação |
 |---|-----------|--------|----------|
 | 1 | Crítica | `next` 15.5.23 com falha crítica publicada; `postcss` e `sharp` com falhas graves | Corrigido: `next` 15.5.27, `postcss` 8.5.28 forçado via `overrides`. `npm audit`: 0 |
-| 2 | Alta | Storage sem policy versionada; os uploads não ficavam na pasta da loja, então não dava para isolar uma loja da outra | Corrigido: upload em `<loja_id>/...` + policies por pasta + só WebP até 5 MB |
+| 2 | Alta | Storage sem policy versionada; os uploads não ficavam na pasta da loja, então não dava para isolar uma loja da outra | Corrigido: upload em `<loja_id>/...` + policies por pasta + só imagem (WebP, JPEG ou PNG) até 5 MB |
 | 3 | Alta | Visitante anônimo cria lead em **qualquer loja**, já com status `ganho`, com texto de qualquer tamanho | Corrigido: só `novo`, só loja ativa, campos limitados, carro precisa ser da mesma loja |
 | 4 | Média | Mesma brecha na tabela `visitas` (dá para inflar ou poluir o relatório de acessos) | Corrigido: só loja ativa, campos limitados |
 | 5 | Média | `vendedor` tinha o mesmo poder do `gestor` (excluía carro, mexia em banner) | Corrigido: exclusão de carro, banners e logo só para o gestor |
